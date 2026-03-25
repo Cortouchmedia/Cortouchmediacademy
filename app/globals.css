@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-primary: #219BD5;
+  --brand-secondary: #219BD5;
+  --brand-accent: #10B981;
+  --brand-bg: #f8f9fa;
+  --brand-surface: #ffffff;
+  --brand-muted: #6B7280;
+  --brand-navy: #1e3a8a;
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-playfair);
+}
+
+body {
+  color: #1F2937;
+  background-color: var(--brand-bg);
+  font-family: var(--font-sans), sans-serif;
+}
+
+.font-serif {
+  font-family: var(--font-serif), serif;
+}
+
+@theme {
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-muted: var(--brand-muted);
+  --color-brand-navy: var(--brand-navy);
+  --font-serif: var(--font-serif);
+}
