@@ -29,7 +29,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (isLoggedIn && currentUser) {
       const path = pathname.split('/')[1];
-      if (path === 'dashboard') handleNavigate('Dashboard');
+      if (path === 'student-dashboard') handleNavigate('Dashboard');
+      else if (path === 'instructor-dashboard') handleNavigate('Instructor Dashboard');
+      else if (path === 'instructor-courses') handleNavigate('Instructor Courses');
+      else if (path === 'instructor-students') handleNavigate('Instructor Students');
+      else if (path === 'instructor-revenue') handleNavigate('Instructor Revenue');
       else if (path === 'catalog') handleNavigate('Catalog');
       else if (path === 'my-courses') handleNavigate('My Courses');
       else if (path === 'certificates') handleNavigate('Certificates');
@@ -52,8 +56,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (isLoggedIn && currentUser && pathname === '/') {
       if (currentUser.role === 'admin') {
         router.push('/admin');
+      } else if (currentUser.role === 'instructor') {
+        router.push('/instructor-dashboard');
       } else {
-        router.push('/dashboard');
+        router.push('/student-dashboard');
       }
     }
   }, [isLoggedIn, currentUser, pathname, router]);
@@ -85,14 +91,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (pathname === '/login') {
       return <SignInPage onSignIn={(role) => {
         handleLogin(role);
-        router.push('/dashboard');
+        if (role === 'instructor') router.push('/instructor-dashboard');
+        else if (role === 'admin') router.push('/admin');
+        else router.push('/student-dashboard');
       }} onNavigateToSignUp={handleNavigateToSignUp} />;
     }
 
     if (pathname === '/signup' || authView === 'signUp') {
       return <SignUpPage onSignUp={(role) => {
         handleLogin(role);
-        router.push('/dashboard');
+        if (role === 'instructor') router.push('/instructor-dashboard');
+        else if (role === 'admin') router.push('/admin');
+        else router.push('/student-dashboard');
       }} onNavigateToSignIn={handleNavigateToSignIn} />;
     }
     
@@ -119,8 +129,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               activePage={currentPage} 
               onNavigate={(page) => {
                 handleNavigate(page);
-                const path = page.toLowerCase().replace(' ', '-');
-                router.push(`/${path === 'dashboard' ? 'dashboard' : path === 'catalog' ? 'catalog' : path === 'my-courses' ? 'my-courses' : path === 'certificates' ? 'certificates' : path === 'community' ? 'community' : path === 'settings' ? 'settings' : path === 'about-us' ? 'about' : path === 'admin' ? 'admin' : 'dashboard'}`);
+                let path = page.toLowerCase().replace(/\s+/g, '-');
+                if (path === 'dashboard') path = 'student-dashboard';
+                router.push(`/${path}`);
               }} 
               onLogout={handleLogout}
             />

@@ -1,13 +1,13 @@
 import React from 'react';
 
-export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin';
+export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students';
 
 export interface User {
   id: number;
   name: string;
   email: string;
   avatarUrl: string;
-  role: 'student' | 'admin';
+  role: 'student' | 'admin' | 'instructor';
   enrolledCourseIds: number[];
 }
 
@@ -82,6 +82,10 @@ export interface Course {
   isAssistantTyping?: boolean;
   webinars?: Webinar[];
   prerequisiteCourseIds?: number[];
+  whatYouWillLearn?: string[];
+  requirements?: string[];
+  instructorBio?: string;
+  features?: string[];
 }
 
 export interface CourseWithEnrollment extends Course {

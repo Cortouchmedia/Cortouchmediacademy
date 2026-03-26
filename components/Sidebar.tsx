@@ -32,13 +32,22 @@ const NavLink: React.FC<{
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onLogout }) => {
-  const navItems: { label: Page; icon: string }[] = [
+  const studentNavItems: { label: Page; icon: string }[] = [
     { label: 'Dashboard', icon: 'dashboard' },
     { label: 'My Courses', icon: 'bookOpen' },
     { label: 'Catalog', icon: 'courses' },
     { label: 'Certificates', icon: 'certificates' },
     { label: 'Community', icon: 'community' },
   ];
+
+  const instructorNavItems: { label: Page; icon: string }[] = [
+    { label: 'Instructor Dashboard', icon: 'dashboard' },
+    { label: 'Instructor Courses', icon: 'bookOpen' },
+    { label: 'Instructor Students', icon: 'community' },
+    { label: 'Instructor Revenue', icon: 'trendingUp' },
+  ];
+
+  const navItems = user.role === 'instructor' ? instructorNavItems : studentNavItems;
 
   const bottomNavItems: { label: Page; icon: string }[] = [
       { label: 'Settings', icon: 'settings' },

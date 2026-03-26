@@ -3,14 +3,18 @@
 import React from 'react';
 import { Icon } from './Icon';
 import type { Course, User } from '../types';
+import { useRouter } from 'next/navigation';
 
 interface AdminDashboardProps {
   users: User[];
   courses: Course[];
 }
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: string; color: string }> = ({ title, value, icon, color }) => (
-  <div className="bg-brand-surface p-6 rounded-xl border border-gray-200 shadow-sm">
+const StatCard: React.FC<{ title: string; value: string | number; icon: string; color: string; onClick?: () => void }> = ({ title, value, icon, color, onClick }) => (
+  <div 
+    className={`bg-brand-surface p-6 rounded-xl border border-gray-200 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+    onClick={onClick}
+  >
     <div className="flex items-center justify-between mb-4">
       <div className={`p-3 rounded-lg ${color} bg-opacity-10`}>
         <Icon name={icon} className={`w-6 h-6 ${color.replace('bg-', 'text-')}`} />
@@ -23,6 +27,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: string; 
 );
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, courses }) => {
+  const router = useRouter();
   const totalEnrollments = users.reduce((acc, user) => acc + user.enrolledCourseIds.length, 0);
   const totalRevenue = courses.reduce((acc, course) => acc + (course.price * course.enrollmentCount), 0);
 
@@ -34,18 +39,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, courses }
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Students" value={users.length} icon="community" color="bg-[#219BD5]" />
-        <StatCard title="Total Courses" value={courses.length} icon="courses" color="bg-brand-primary" />
+        <StatCard title="Total Students" value={users.length} icon="community" color="bg-[#219BD5]" onClick={() => router.push('/admin/users')} />
+        <StatCard title="Total Courses" value={courses.length} icon="courses" color="bg-brand-primary" onClick={() => router.push('/admin/courses')} />
         <StatCard title="Total Enrollments" value={totalEnrollments} icon="bookOpen" color="bg-brand-accent" />
-        <StatCard title="Total Revenue" value={`₦${(totalRevenue / 1000000).toFixed(1)}M`} icon="trendingUp" color="bg-green-500" />
+        <StatCard title="Total Revenue" value={`₦${(totalRevenue / 1000000).toFixed(1)}M`} icon="trendingUp" color="bg-green-500" onClick={() => router.push('/admin/reports')} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-brand-surface p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h3 className="text-xl font-bold text-gray-900 mb-6">Recent Enrollments</h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900">Recent Enrollments</h3>
+            <button onClick={() => router.push('/admin/users')} className="text-sm font-bold text-[#219BD5] hover:underline">View All</button>
+          </div>
           <div className="space-y-4">
             {users.slice(0, 5).map(user => (
-              <div key={user.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-lg border border-gray-100">
+              <div key={user.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => router.push('/admin/users')}>
                 <div className="flex items-center gap-3">
                   <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
                   <div>
@@ -62,10 +70,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, courses }
         </div>
 
         <div className="bg-brand-surface p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h3 className="text-xl font-bold text-gray-900 mb-6">Top Performing Courses</h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900">Top Performing Courses</h3>
+            <button onClick={() => router.push('/admin/courses')} className="text-sm font-bold text-brand-primary hover:underline">View All</button>
+          </div>
           <div className="space-y-4">
             {courses.sort((a, b) => b.enrollmentCount - a.enrollmentCount).slice(0, 5).map(course => (
-              <div key={course.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-lg border border-gray-100">
+              <div key={course.id} className="flex items-center justify-between p-3 bg-brand-bg rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => router.push('/admin/courses')}>
                 <div className="flex items-center gap-3">
                   <img src={course.imageUrl} alt={course.title} className="w-12 h-8 object-cover rounded" />
                   <div>

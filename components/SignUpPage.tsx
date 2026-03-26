@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { Logo } from './Logo';
 
 interface SignUpPageProps {
-  onSignUp: (role?: 'admin' | 'student') => void;
+  onSignUp: (role?: 'admin' | 'student' | 'instructor') => void;
   onNavigateToSignIn: () => void;
 }
 
@@ -23,6 +23,7 @@ const FormInput: React.FC<{ label: string; type: string; id: string; placeholder
 
 export const SignUpPage: React.FC<SignUpPageProps> = ({ onSignUp, onNavigateToSignIn }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState<'student' | 'instructor'>('student');
 
   return (
     <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4">
@@ -32,6 +33,22 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSignUp, onNavigateToSi
         <div className="bg-brand-surface p-8 rounded-lg shadow-lg border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Create Your Account</h2>
             <p className="text-brand-muted text-center mb-6">Start your learning journey today.</p>
+            
+            <div className="flex gap-4 mb-6">
+                <button 
+                    onClick={() => setRole('student')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${role === 'student' ? 'bg-[#219BD5] text-white border-[#219BD5]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#219BD5] hover:text-[#219BD5]'}`}
+                >
+                    Student
+                </button>
+                <button 
+                    onClick={() => setRole('instructor')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${role === 'instructor' ? 'bg-[#219BD5] text-white border-[#219BD5]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#219BD5] hover:text-[#219BD5]'}`}
+                >
+                    Instructor
+                </button>
+            </div>
+
             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
                 <FormInput label="Full Name" type="text" id="name" placeholder="Alex" />
                 <FormInput label="Email Address" type="email" id="email" placeholder="alex@cortouch.io" />
@@ -42,7 +59,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSignUp, onNavigateToSi
                     onClick={(e) => {
                         e.preventDefault();
                         setIsLoading(true);
-                        setTimeout(() => onSignUp('student'), 1500);
+                        setTimeout(() => onSignUp(role), 1500);
                     }}
                     disabled={isLoading}
                     className="w-full px-4 py-3 bg-brand-primary text-white font-bold rounded-lg hover:bg-opacity-80 transition-colors flex justify-center items-center disabled:bg-opacity-50 disabled:cursor-not-allowed"
@@ -53,7 +70,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSignUp, onNavigateToSi
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     ) : (
-                        'Sign Up'
+                        `Sign Up as ${role.charAt(0).toUpperCase() + role.slice(1)}`
                     )}
                 </button>
             </form>

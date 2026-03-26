@@ -22,7 +22,11 @@ export default function CourseDetailsPage() {
       <div className="flex flex-col items-center justify-center h-full">
         <h1 className="text-2xl font-bold mb-4">Course not found</h1>
         <button 
-          onClick={() => router.push('/dashboard')}
+          onClick={() => {
+            if (currentUser.role === 'instructor') router.push('/instructor-dashboard');
+            else if (currentUser.role === 'admin') router.push('/admin');
+            else router.push('/student-dashboard');
+          }}
           className="px-4 py-2 bg-brand-primary text-white rounded-lg"
         >
           Back to Dashboard

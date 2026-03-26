@@ -7,6 +7,7 @@ import { Icon } from './Icon';
 import { ProgressBar } from './ProgressBar';
 import { PaystackButton } from './PaystackButton';
 import { InstructorAssistant } from './InstructorAssistant';
+import { CourseLandingPage } from './CourseLandingPage';
 
 interface CourseDetailsProps {
     user: User;
@@ -43,6 +44,17 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
     const prerequisiteCourses = course.prerequisiteCourseIds
         ? allCourses.filter(c => course.prerequisiteCourseIds!.includes(c.id))
         : [];
+
+    if (!course.isEnrolled) {
+        return (
+            <CourseLandingPage 
+                user={user} 
+                course={course} 
+                onBack={onBack} 
+                onEnrollmentSuccess={onEnrollmentSuccess} 
+            />
+        );
+    }
 
     return (
         <div className="space-y-8">

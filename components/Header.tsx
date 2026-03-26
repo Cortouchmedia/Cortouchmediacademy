@@ -39,6 +39,10 @@ export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, 
           </div>
 
           <button className="relative text-brand-muted hover:text-gray-900">
+            <Icon name="globe" className="w-6 h-6" />
+          </button>
+
+          <button className="relative text-brand-muted hover:text-gray-900">
             <Icon name="bell" className="w-6 h-6" />
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -47,6 +51,17 @@ export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, 
           </button>
 
           <div className="flex items-center gap-3">
+            {user.role === 'instructor' && (
+              <button 
+                onClick={() => {
+                  const isInstructorPage = window.location.pathname.includes('instructor');
+                  window.location.href = isInstructorPage ? '/student-dashboard' : '/instructor-dashboard';
+                }}
+                className="mr-4 text-sm font-bold text-[#219BD5] hover:underline"
+              >
+                {typeof window !== 'undefined' && window.location.pathname.includes('instructor') ? 'Switch to Student View' : 'Switch to Instructor View'}
+              </button>
+            )}
             <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
             <div>
               <div className="flex items-center gap-2">

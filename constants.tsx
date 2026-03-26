@@ -18,6 +18,14 @@ export const mockUsers: User[] = [
         avatarUrl: 'https://picsum.photos/seed/user2/100/100',
         role: 'student',
         enrolledCourseIds: [3],
+    },
+    {
+        id: 3,
+        name: 'David Miller',
+        email: 'david.miller@cortouch.io',
+        avatarUrl: 'https://picsum.photos/seed/instructor1/100/100',
+        role: 'instructor',
+        enrolledCourseIds: [],
     }
 ];
 
@@ -64,6 +72,25 @@ export const mockCourses: Course[] = [
     ],
     chatHistory: [
         { id: 1, text: "Hello! I'm your AI assistant for this course. How can I help you learn UI/UX design?", sender: 'bot', timestamp: '10:00 AM' }
+    ],
+    whatYouWillLearn: [
+      'Master the principles of user-centered design',
+      'Conduct effective user research and usability testing',
+      'Create professional wireframes and high-fidelity prototypes',
+      'Design intuitive interfaces for mobile and web',
+      'Build a strong UI/UX design portfolio'
+    ],
+    requirements: [
+      'No prior design experience required',
+      'A computer with Figma (free version is fine)',
+      'Willingness to learn and experiment'
+    ],
+    instructorBio: 'David is a Senior Product Designer with over 10 years of experience in the tech industry. He has worked with top-tier companies and startups to build user-centric digital products.',
+    features: [
+      'Hands-on projects',
+      'AI-powered grading',
+      'Live Q&A sessions',
+      'Certificate of completion'
     ]
   },
   {
@@ -86,6 +113,25 @@ export const mockCourses: Course[] = [
     prerequisiteCourseIds: [4],
     chatHistory: [
         { id: 1, text: "Welcome to Advanced Python! Ask me anything about Pandas, NumPy, or machine learning concepts.", sender: 'bot', timestamp: '11:00 AM' }
+    ],
+    whatYouWillLearn: [
+      'Advanced data manipulation with Pandas',
+      'Numerical computing with NumPy',
+      'Machine learning algorithms with Scikit-learn',
+      'Data visualization with Matplotlib and Seaborn',
+      'Building and evaluating predictive models'
+    ],
+    requirements: [
+      'Basic knowledge of Python',
+      'Understanding of basic statistics',
+      'Python installed on your computer'
+    ],
+    instructorBio: 'Emily is a Data Scientist and Python expert with a passion for teaching. She has a PhD in Computer Science and years of experience in the field.',
+    features: [
+      'Real-world datasets',
+      'Interactive coding exercises',
+      'Expert feedback',
+      'Career guidance'
     ]
   },
   {
@@ -107,6 +153,25 @@ export const mockCourses: Course[] = [
     reviews: [],
     chatHistory: [
         { id: 1, text: "Hi there! I'm your AI assistant for Social Media Marketing. Let's create some amazing campaigns together!", sender: 'bot', timestamp: '12:00 PM' }
+    ],
+    whatYouWillLearn: [
+      'Develop a comprehensive social media strategy',
+      'Create engaging content for different platforms',
+      'Understand social media analytics and reporting',
+      'Manage social media advertising campaigns',
+      'Build and engage online communities'
+    ],
+    requirements: [
+      'Basic understanding of social media platforms',
+      'Interest in marketing and brand building',
+      'No prior marketing experience needed'
+    ],
+    instructorBio: 'Michael is a Digital Marketing Strategist with a focus on social media. He has helped numerous brands grow their online presence and reach their target audience.',
+    features: [
+      'Case studies of successful campaigns',
+      'Practical assignments',
+      'Networking opportunities',
+      'Industry-recognized certificate'
     ]
   },
   {
@@ -130,6 +195,25 @@ export const mockCourses: Course[] = [
     reviews: [],
     chatHistory: [
         { id: 1, text: "Hello! Ready to learn Web Development? I'm here to help you with HTML, CSS, and JavaScript questions.", sender: 'bot', timestamp: '01:00 PM' }
+    ],
+    whatYouWillLearn: [
+      'Build websites with HTML and CSS',
+      'Add interactivity with JavaScript',
+      'Understand responsive web design',
+      'Learn the basics of web accessibility',
+      'Deploy your websites to the web'
+    ],
+    requirements: [
+      'No prior coding experience required',
+      'A computer with a web browser',
+      'A text editor (like VS Code)'
+    ],
+    instructorBio: 'Sarah is a Full-Stack Developer and educator. She loves building things for the web and helping others start their journey in tech.',
+    features: [
+      'Step-by-step tutorials',
+      'Code-along projects',
+      'Supportive community',
+      'Lifetime access to materials'
     ]
   }
 ];

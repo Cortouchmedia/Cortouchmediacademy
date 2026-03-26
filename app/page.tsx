@@ -10,7 +10,13 @@ export default function Page() {
 
   useEffect(() => {
     if (isLoggedIn && currentUser) {
-      router.push('/dashboard');
+      if (currentUser.role === 'instructor') {
+        router.push('/instructor-dashboard');
+      } else if (currentUser.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/student-dashboard');
+      }
     }
   }, [isLoggedIn, currentUser, router]);
 

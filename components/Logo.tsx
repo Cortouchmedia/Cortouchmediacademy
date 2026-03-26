@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Link from 'next/link';
 import { Icon } from './Icon';
 import { LOGO_URL } from '../config';
 
@@ -15,7 +16,7 @@ interface LogoProps {
 }
 
 export const Logo: React.FC<LogoProps> = ({ 
-  className = "flex items-center gap-2", 
+  className = "flex items-center gap-2 hover:opacity-90 transition-opacity", 
   iconClassName = "w-6 h-6 text-white",
   textClassName = "text-xl font-extrabold tracking-tight text-gray-900",
   imgClassName = "",
@@ -35,16 +36,10 @@ export const Logo: React.FC<LogoProps> = ({
 
   const currentSize = sizeMap[size];
 
-  if (LOGO_URL) {
-    return (
-      <div className={className}>
-        <img src={LOGO_URL} alt="Logo" className={`${currentSize.img} object-contain ${imgClassName}`} />
-      </div>
-    );
-  }
-
-  return (
-    <div className={className}>
+  const content = LOGO_URL ? (
+    <img src={LOGO_URL} alt="Logo" className={`${currentSize.img} object-contain ${imgClassName}`} />
+  ) : (
+    <>
       <div className={`${currentSize.box} ${bgClass} rounded-lg flex items-center justify-center shadow-lg ${variant === 'primary' ? 'shadow-brand-primary/20' : variant === 'accent' ? 'shadow-brand-accent/20' : ''}`}>
         <Icon name={variant === 'accent' ? 'shield' : 'academicCap'} className={`${currentSize.icon} text-white`} />
       </div>
@@ -53,6 +48,12 @@ export const Logo: React.FC<LogoProps> = ({
           Cortouch <span className={accentTextClass}>Media</span>
         </span>
       )}
-    </div>
+    </>
+  );
+
+  return (
+    <Link href="/" className={className}>
+      {content}
+    </Link>
   );
 };

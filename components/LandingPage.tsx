@@ -710,7 +710,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   // Search function
-  const handleSearch = (query: string) => {
+  const handleSearch = (query: string, shouldScroll: boolean = false) => {
     setSearchQuery(query);
     if (query.trim() === "") {
       setIsSearching(false);
@@ -725,6 +725,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       );
       setSearchResults(results);
       setIsSearching(true);
+      
+      if (shouldScroll) {
+        const coursesSection = document.getElementById('courses');
+        if (coursesSection) {
+          coursesSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
     }
   };
 
@@ -755,8 +762,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="container mx-auto px-4 py-3 flex items-center gap-4 lg:gap-8">
           <Logo size="md" />
           
-          <button className="hidden lg:block text-sm text-gray-600 hover:text-[#219BD5] font-medium">
-            Categories
+          <button 
+            onClick={() => document.getElementById('courses')?.scrollIntoView({ behavior: 'smooth' })}
+            className="hidden lg:block text-sm text-gray-600 hover:text-[#219BD5] font-medium"
+          >
+            Courses
           </button>
 
           <div className="flex-1 max-w-2xl relative hidden md:block">
@@ -768,6 +778,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               placeholder="Search for anything" 
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
               className="w-full bg-gray-100 border border-transparent focus:bg-white focus:border-[#219BD5] rounded-full py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
             />
             {searchQuery && (
@@ -786,6 +797,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
+            
+          
             <button
               onClick={onNavigateToSignIn}
               className="px-4 py-2 text-sm font-bold text-[#219BD5] border border-[#219BD5] hover:bg-[#219BD5]/10 transition-colors"
@@ -798,9 +811,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               Sign up
             </button>
-            <button className="p-2 border border-[#219BD5] hover:bg-[#219BD5]/10 hidden sm:block">
-              <Icon name="settings" className="w-5 h-5 text-[#219BD5]" />
+            <button className="p-2 border border-gray-300 hover:bg-gray-100 transition-colors">
+              <Icon name="globe" className="w-5 h-5 text-gray-600" />
             </button>
+            
           </div>
         </div>
       </header>
@@ -830,10 +844,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   placeholder="What do you want to learn?" 
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
                   className="w-full border border-gray-300 focus:border-[#219BD5] py-3.5 px-4 text-base outline-none focus:ring-1 focus:ring-[#219BD5] rounded-lg"
                 />
                 <button 
-                  onClick={() => handleSearch(searchQuery)}
+                  onClick={() => handleSearch(searchQuery, true)}
                   className="absolute right-0 top-0 bottom-0 px-6 bg-[#219BD5] text-white hover:bg-[#1a7fb0] transition-colors font-semibold rounded-r-lg"
                 >
                   <Icon name="search" className="w-5 h-5" />

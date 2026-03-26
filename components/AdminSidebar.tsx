@@ -64,7 +64,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ user, onLogout }) =>
           iconName="logout"
           label="Back to Academy"
           isActive={false}
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/student-dashboard')}
         />
         <button
             onClick={onLogout}

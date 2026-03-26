@@ -31,7 +31,7 @@ interface AppContextType {
   setIsBotTyping: (val: boolean) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setSearchQuery: (query: string) => void;
-  handleLogin: (role?: 'admin' | 'student') => void;
+  handleLogin: (role?: 'admin' | 'student' | 'instructor') => void;
   handleLogout: () => void;
   handleNavigate: (page: Page) => void;
   handleCourseSelect: (course: Course) => void;
@@ -64,10 +64,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleLogin = (role?: 'admin' | 'student') => {
-    const user = role === 'student' ? users[1] : users[0];
+  const handleLogin = (role?: 'admin' | 'student' | 'instructor') => {
+    let user;
+    if (role === 'instructor') {
+      user = users[2];
+    } else if (role === 'student') {
+      user = users[1];
+    } else {
+      user = users[0];
+    }
     setCurrentUser(user);
     setIsLoggedIn(true);
+    if (role === 'instructor') {
+      setCurrentPage('Instructor Dashboard');
+    } else if (role === 'admin') {
+      setCurrentPage('Admin');
+    } else {
+      setCurrentPage('Dashboard');
+    }
   };
 
   const handleLogout = () => {

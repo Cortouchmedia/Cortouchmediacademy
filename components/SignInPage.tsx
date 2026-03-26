@@ -5,7 +5,7 @@ import { Icon } from './Icon';
 import { Logo } from './Logo';
 
 interface SignInPageProps {
-  onSignIn: (role?: 'admin' | 'student') => void;
+  onSignIn: (role?: 'admin' | 'student' | 'instructor') => void;
   onNavigateToSignUp: () => void;
 }
 
@@ -23,6 +23,7 @@ const FormInput: React.FC<{ label: string; type: string; id: string; placeholder
 
 export const SignInPage: React.FC<SignInPageProps> = ({ onSignIn, onNavigateToSignUp }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [role, setRole] = useState<'student' | 'instructor'>('student');
 
   return (
     <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4">
@@ -32,10 +33,26 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSignIn, onNavigateToSi
         <div className="bg-brand-surface p-8 rounded-lg shadow-lg border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">Welcome Back!</h2>
             <p className="text-brand-muted text-center mb-6">Sign in to continue your learning journey.</p>
+            
+            <div className="flex gap-4 mb-6">
+                <button 
+                    onClick={() => setRole('student')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${role === 'student' ? 'bg-[#219BD5] text-white border-[#219BD5]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#219BD5] hover:text-[#219BD5]'}`}
+                >
+                    Student
+                </button>
+                <button 
+                    onClick={() => setRole('instructor')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${role === 'instructor' ? 'bg-[#219BD5] text-white border-[#219BD5]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#219BD5] hover:text-[#219BD5]'}`}
+                >
+                    Instructor
+                </button>
+            </div>
+
             <form className="space-y-6" onSubmit={(e) => {
                 e.preventDefault();
                 setIsLoading(true);
-                setTimeout(() => onSignIn('student'), 1500);
+                setTimeout(() => onSignIn(role), 1500);
             }}>
                 <FormInput label="Email Address" type="email" id="email" placeholder="alex@cortouch.io" />
                 <FormInput label="Password" type="password" id="password" placeholder="••••••••" />
@@ -51,7 +68,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({ onSignIn, onNavigateToSi
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     ) : (
-                        'Sign In'
+                        `Sign In as ${role.charAt(0).toUpperCase() + role.slice(1)}`
                     )}
                 </button>
             </form>
