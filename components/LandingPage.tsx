@@ -791,10 +791,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             )}
           </div>
 
-          <div className="hidden xl:flex items-center gap-6 text-sm font-medium text-gray-600">
-            <a href="#" className="hover:text-[#219BD5]">Cortouch Business</a>
-            <a href="#" className="hover:text-[#219BD5]">Teach on Cortouch</a>
-          </div>
+         
 
           <div className="flex items-center gap-2 ml-auto">
             
