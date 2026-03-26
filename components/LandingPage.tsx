@@ -759,16 +759,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           scrolled ? "shadow-md" : "shadow-sm"
         }`}
       >
-        <div className="container mx-auto px-4 py-3 flex items-center gap-4 lg:gap-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16 py-3 flex items-center gap-4 lg:gap-8">
           <Logo size="md" />
           
-          <button 
-            onClick={() => document.getElementById('courses')?.scrollIntoView({ behavior: 'smooth' })}
-            className="hidden lg:block text-sm text-gray-600 hover:text-[#219BD5] font-medium"
-          >
-            Courses
-          </button>
-
           <div className="flex-1 max-w-2xl relative hidden md:block">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
               <Icon name="search" className="w-4 h-4 text-gray-400" />
@@ -791,11 +784,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             )}
           </div>
 
-         
 
           <div className="flex items-center gap-2 ml-auto">
-            
-          
+            <button 
+              onClick={() => document.getElementById('courses')?.scrollIntoView({ behavior: 'smooth' })}
+              className="hidden sm:block px-3 py-2 text-sm font-medium text-gray-600 hover:text-[#219BD5]"
+            >
+              Courses
+            </button>
             <button
               onClick={onNavigateToSignIn}
               className="px-4 py-2 text-sm font-bold text-[#219BD5] border border-[#219BD5] hover:bg-[#219BD5]/10 transition-colors"
@@ -817,8 +813,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       <main className="pt-[65px]">
-        {/* Hero Section - White Card Background */}
-        <section className="relative h-[500px] lg:h-[550px] overflow-hidden">
+        {/* Hero Section - Wide Background, Boxed Content */}
+        <section className="relative h-[450px] lg:h-[500px] overflow-hidden">
           <img 
             src="https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop" 
             alt="Professional in modern office workspace" 
@@ -827,12 +823,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           />
           <div className="absolute inset-0 bg-black/30"></div>
           
-          <div className="container mx-auto px-4 h-full flex items-center relative z-10">
-            <div className="bg-white p-8 lg:p-10 rounded-lg shadow-2xl max-w-xl">
-              <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 mb-5 leading-tight">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16 h-full flex items-center relative z-10">
+            <div className="bg-white p-8 lg:p-10 rounded-lg shadow-2xl max-w-md">
+              <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4 leading-tight">
                 Learning that gets you
               </h1>
-              <p className="text-gray-700 mb-8 text-lg leading-relaxed">
+              <p className="text-gray-600 mb-6 text-base leading-relaxed">
                 Skills for your present (and your future). Get started with us today.
               </p>
               <div className="relative">
@@ -842,13 +838,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
-                  className="w-full border border-gray-300 focus:border-[#219BD5] py-3.5 px-4 text-base outline-none focus:ring-1 focus:ring-[#219BD5] rounded-lg"
+                  className="w-full border border-gray-300 focus:border-[#219BD5] py-3 px-4 text-sm outline-none focus:ring-1 focus:ring-[#219BD5] rounded-lg"
                 />
                 <button 
                   onClick={() => handleSearch(searchQuery, true)}
-                  className="absolute right-0 top-0 bottom-0 px-6 bg-[#219BD5] text-white hover:bg-[#1a7fb0] transition-colors font-semibold rounded-r-lg"
+                  className="absolute right-0 top-0 bottom-0 px-4 bg-[#219BD5] text-white hover:bg-[#1a7fb0] transition-colors font-semibold rounded-r-lg"
                 >
-                  <Icon name="search" className="w-5 h-5" />
+                  <Icon name="search" className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -857,7 +853,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Trust Section */}
         <section className="py-12 bg-gray-50 border-b border-gray-200">
-          <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <p className="text-center text-gray-600 mb-8 text-lg">Trusted by over 15,000 companies and millions of learners worldwide</p>
             <div className="flex flex-wrap justify-center items-center gap-8 lg:gap-16 opacity-60">
               {['Volkswagen', 'Samsung', 'Cisco', 'AT&T', 'Procter & Gamble', 'Hewlett Packard'].map(partner => (
@@ -869,7 +865,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Broad Selection Section with Interactive Tabs */}
         <section id="courses" className="py-16 bg-white">
-          <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-3xl font-bold text-gray-900">
                 {isSearching ? `Search Results for "${searchQuery}"` : "A broad selection of courses"}
@@ -990,7 +986,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Top Categories */}
         <section className="py-16 bg-white">
-          <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <h2 className="text-2xl font-bold text-gray-900 mb-8">Top categories</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
@@ -1016,7 +1012,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Features Section */}
         <section className="py-16 bg-gray-50 border-y border-gray-200">
-          <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="grid md:grid-cols-3 gap-12 text-center">
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 bg-[#219BD5] rounded-full flex items-center justify-center mb-4">
@@ -1045,7 +1041,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* CTA Section - Instructor Theme */}
         <section className="py-20 bg-white">
-          <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="flex flex-col lg:flex-row items-center gap-16">
               <div className="lg:w-1/2">
                 <img src="https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=600&h=450&fit=crop" alt="Instructor teaching" className="w-full rounded-sm shadow-lg" referrerPolicy="no-referrer" />
@@ -1067,7 +1063,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* Footer */}
       <footer id="about" className="bg-white border-t border-gray-100 pt-20 pb-10">
-        <div className="container mx-auto px-6">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
           <div className="grid md:grid-cols-4 gap-12 mb-16">
             <div className="col-span-2">
               <div className="flex items-center gap-2 mb-6">

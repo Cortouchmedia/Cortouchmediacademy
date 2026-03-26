@@ -817,9 +817,6 @@ video {
 .mb-4 {
   margin-bottom: 1rem;
 }
-.mb-5 {
-  margin-bottom: 1.25rem;
-}
 .mb-6 {
   margin-bottom: 1.5rem;
 }
@@ -954,6 +951,9 @@ video {
 }
 .h-8 {
   height: 2rem;
+}
+.h-\[450px\] {
+  height: 450px;
 }
 .h-\[500px\] {
   height: 500px;
@@ -1736,10 +1736,6 @@ video {
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
 }
-.py-3\.5 {
-  padding-top: 0.875rem;
-  padding-bottom: 0.875rem;
-}
 .py-4 {
   padding-top: 1rem;
   padding-bottom: 1rem;
@@ -2423,6 +2419,11 @@ body {
   .sm\:items-center {
     align-items: center;
   }
+
+  .sm\:px-6 {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
 }
 
 @media (min-width: 768px) {
@@ -2486,16 +2487,12 @@ body {
     grid-column: span 2 / span 2;
   }
 
-  .lg\:block {
-    display: block;
-  }
-
   .lg\:h-64 {
     height: 16rem;
   }
 
-  .lg\:h-\[550px\] {
-    height: 550px;
+  .lg\:h-\[500px\] {
+    height: 500px;
   }
 
   .lg\:w-1\/2 {
@@ -2538,6 +2535,11 @@ body {
     padding: 4rem;
   }
 
+  .lg\:px-16 {
+    padding-left: 4rem;
+    padding-right: 4rem;
+  }
+
   .lg\:py-24 {
     padding-top: 6rem;
     padding-bottom: 6rem;
@@ -2552,9 +2554,9 @@ body {
     line-height: 2rem;
   }
 
-  .lg\:text-5xl {
-    font-size: 3rem;
-    line-height: 1;
+  .lg\:text-4xl {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
   }
 
   .lg\:text-6xl {
@@ -2564,10 +2566,6 @@ body {
 }
 
 @media (min-width: 1280px) {
-
-  .xl\:flex {
-    display: flex;
-  }
 
   .xl\:grid-cols-4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
