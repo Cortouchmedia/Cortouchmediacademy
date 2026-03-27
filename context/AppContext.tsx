@@ -104,20 +104,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleLogin = (role?: 'admin' | 'student' | 'instructor') => {
-    let user;
-    if (role === 'instructor') {
-      user = users[2];
-    } else if (role === 'student') {
-      user = users[1];
-    } else {
-      user = users[0];
-    }
+    let user = users.find(u => u.role === (role || 'admin')) || users[0];
     setCurrentUser(user);
     setIsLoggedIn(true);
-    logAuditEvent('Login', `${user.name} logged in as ${role || 'user'}`, 'auth');
-    if (role === 'instructor') {
+    logAuditEvent('Login', `${user.name} logged in as ${user.role}`, 'auth');
+    if (user.role === 'instructor') {
       setCurrentPage('Instructor Dashboard');
-    } else if (role === 'admin') {
+    } else if (user.role === 'admin') {
       setCurrentPage('Admin');
     } else {
       setCurrentPage('Dashboard');

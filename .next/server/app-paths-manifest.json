@@ -1,8 +1,8 @@
 {
   "/instructor-students/page": "app/instructor-students/page.js",
-  "/community/page": "app/community/page.js",
-  "/signup/page": "app/signup/page.js",
+  "/login/page": "app/login/page.js",
   "/instructor-dashboard/page": "app/instructor-dashboard/page.js",
-  "/certificates/page": "app/certificates/page.js",
-  "/student-dashboard/page": "app/student-dashboard/page.js"
+  "/instructor-revenue/page": "app/instructor-revenue/page.js",
+  "/signup/page": "app/signup/page.js",
+  "/instructor-courses/page": "app/instructor-courses/page.js"
 }

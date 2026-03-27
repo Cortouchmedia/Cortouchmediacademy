@@ -48,8 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, 
   const instructorNavItems: { label: Page; icon: string; translation: string }[] = [
     { label: 'Instructor Dashboard', icon: 'dashboard', translation: t.dashboard },
     { label: 'Instructor Courses', icon: 'bookOpen', translation: t.myCourses },
-    { label: 'Instructor Students', icon: 'community', translation: t.community },
-    { label: 'Instructor Revenue', icon: 'trendingUp', translation: 'Revenue' },
+    { label: 'Instructor Students', icon: 'users', translation: t.students },
+    { label: 'Instructor Revenue', icon: 'trendingUp', translation: t.revenue },
   ];
 
   const navItems = user.role === 'instructor' ? instructorNavItems : studentNavItems;

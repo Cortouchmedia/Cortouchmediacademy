@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/instructor-students/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/instructor-students/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,50 +11,30 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/signup/page": [
+    "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/signup/page.js"
+      "static/chunks/app/login/page.js"
     ],
     "/instructor-dashboard/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/instructor-dashboard/page.js"
     ],
-    "/instructor-courses/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/instructor-courses/page.js"
-    ],
-    "/course/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/course/[id]/page.js"
-    ],
     "/instructor-revenue/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/instructor-revenue/page.js"
     ],
-    "/instructor-students/page": [
+    "/signup/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/instructor-students/page.js"
+      "static/chunks/app/signup/page.js"
     ],
-    "/community/page": [
+    "/instructor-courses/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/community/page.js"
-    ],
-    "/certificates/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/certificates/page.js"
-    ],
-    "/student-dashboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/student-dashboard/page.js"
+      "static/chunks/app/instructor-courses/page.js"
     ]
   }
 }
