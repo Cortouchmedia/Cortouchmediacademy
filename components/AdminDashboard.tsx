@@ -4,6 +4,7 @@ import React from 'react';
 import { Icon } from './Icon';
 import type { Course, User } from '../types';
 import { useRouter } from 'next/navigation';
+import { useAppContext } from '../context/AppContext';
 
 interface AdminDashboardProps {
   users: User[];
@@ -33,6 +34,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: string; 
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, courses }) => {
   const router = useRouter();
+  const { auditLogs } = useAppContext();
   
   const totalEnrollments = users.reduce((acc, user) => acc + user.enrolledCourseIds.length, 0);
   const totalRevenue = courses.reduce((acc, course) => acc + (course.price * course.enrollmentCount), 0);
@@ -144,6 +146,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ users, courses }
                 </div>
               ))}
           </div>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-brand-surface p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-gray-900">Recent System Activity</h3>
+          <button 
+            onClick={() => router.push('/admin/audit-log')} 
+            className="text-sm font-bold text-[#219BD5] hover:underline"
+          >
+            View Full Audit Log
+          </button>
+        </div>
+        <div className="space-y-4">
+          {auditLogs.slice(0, 5).map(log => (
+            <div 
+              key={log.id} 
+              className="flex items-center justify-between p-4 bg-brand-bg rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-lg ${
+                  log.type === 'auth' ? 'bg-purple-100 text-purple-600' :
+                  log.type === 'user' ? 'bg-blue-100 text-blue-600' :
+                  log.type === 'course' ? 'bg-green-100 text-green-600' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  <Icon name={log.type === 'auth' ? 'user' : log.type === 'user' ? 'community' : log.type === 'course' ? 'courses' : 'settings'} className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{log.action}</p>
+                  <p className="text-xs text-brand-muted">{log.details}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-gray-900">{new Date(log.timestamp).toLocaleDateString()}</p>
+                <p className="text-[10px] text-brand-muted font-medium">{new Date(log.timestamp).toLocaleTimeString()}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

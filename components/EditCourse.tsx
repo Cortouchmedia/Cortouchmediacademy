@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import type { Course, Lesson, Webinar } from '../types';
 import { Icon } from './Icon';
+import { useAppContext } from '../context/AppContext';
 
 interface EditCourseProps {
     course: Course;
@@ -20,6 +21,7 @@ const initialLessonState = { title: '', duration: '', type: 'video' as 'video' |
 const initialWebinarState = { title: '', date: '', status: 'upcoming' as 'live' | 'upcoming' | 'ended' };
 
 export const EditCourse: React.FC<EditCourseProps> = ({ course, allCourses, onBack, onUpdateCourse, onAddModule, onAddLesson, onDeleteLesson, onAddWebinar, onDeleteWebinar }) => {
+    const { logAuditEvent } = useAppContext();
     const [details, setDetails] = useState({
         title: course.title,
         category: course.category,
@@ -51,6 +53,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({ course, allCourses, onBa
     const handleDetailsSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onUpdateCourse(course.id, details);
+        logAuditEvent('Course Updated', `Updated details for course: ${details.title}`, 'course');
         setIsSaved(true);
         setTimeout(() => setIsSaved(false), 2000);
     };
@@ -59,6 +62,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({ course, allCourses, onBa
         e.preventDefault();
         if (!newModuleTitle.trim()) return;
         onAddModule(course.id, newModuleTitle);
+        logAuditEvent('Module Added', `Added module "${newModuleTitle}" to course: ${course.title}`, 'course');
         setNewModuleTitle('');
     };
     
@@ -66,6 +70,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({ course, allCourses, onBa
         e.preventDefault();
         if (!newLessonData.title.trim() || !addingLessonToModuleId) return;
         onAddLesson(course.id, addingLessonToModuleId, newLessonData);
+        logAuditEvent('Lesson Added', `Added lesson "${newLessonData.title}" to course: ${course.title}`, 'course');
         setNewLessonData(initialLessonState);
         setAddingLessonToModuleId(null);
     }
@@ -172,7 +177,13 @@ export const EditCourse: React.FC<EditCourseProps> = ({ course, allCourses, onBa
                                             <Icon name={lesson.type === 'video' ? 'play' : 'document'} className="w-4 h-4 text-brand-secondary"/>
                                             <span>{lesson.title} ({lesson.duration})</span>
                                         </div>
-                                        <button onClick={() => onDeleteLesson(course.id, lesson.id)} className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors">
+                                        <button 
+                                            onClick={() => {
+                                                onDeleteLesson(course.id, lesson.id);
+                                                logAuditEvent('Lesson Deleted', `Deleted lesson "${lesson.title}" from course: ${course.title}`, 'course');
+                                            }} 
+                                            className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors"
+                                        >
                                             <Icon name="trash" className="w-4 h-4" />
                                         </button>
                                     </li>

@@ -13,7 +13,7 @@ interface PaystackButtonProps {
 
 export const PaystackButton: React.FC<PaystackButtonProps> = ({ email, amount, metadata, onSuccess, onClose }) => {
   const handlePayment = () => {
-    if (PAYSTACK_PUBLIC_KEY === 'pk_test_REPLACE_WITH_YOUR_KEY' || !PAYSTACK_PUBLIC_KEY) {
+    if (PAYSTACK_PUBLIC_KEY === 'pk_live_0a18ecbda9801af17e6c38bc759e33225286a4e5' || !PAYSTACK_PUBLIC_KEY) {
       alert("Paystack API key not set. Please add your public key to the 'config.ts' file.");
       return;
     }

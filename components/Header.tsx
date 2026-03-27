@@ -1,24 +1,39 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Page, User } from '../types';
 import { Icon } from './Icon';
+import { useAppContext } from '../context/AppContext';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
   user: User;
   currentPage: Page | 'Course Details' | 'Edit Course' | 'Search Results' | 'Admin Portal';
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onToggleSidebar: () => void;
+  onNavigateToProfile: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, onSearchChange }) => {
+export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, onSearchChange, onToggleSidebar, onNavigateToProfile }) => {
+  const { language } = useAppContext();
+
   return (
     <header className="bg-brand-surface sticky top-0 z-30 p-4 border-b border-gray-200">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">{currentPage}</h1>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onToggleSidebar}
+            className="lg:hidden p-2 text-brand-muted hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Toggle Menu"
+          >
+            <Icon name="menu" className="w-6 h-6" />
+          </button>
+          <h1 className="text-xl lg:text-2xl font-bold text-gray-900 truncate max-w-[150px] sm:max-w-none">{currentPage}</h1>
+        </div>
 
-        <div className="flex items-center gap-6">
-          <div className="relative w-64">
+        <div className="flex items-center gap-2 sm:gap-6">
+          <div className="relative hidden md:block w-64">
             <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-muted pointer-events-none" />
             <input
               type="text"
@@ -38,9 +53,7 @@ export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, 
             )}
           </div>
 
-          <button className="relative text-brand-muted hover:text-gray-900">
-            <Icon name="globe" className="w-6 h-6" />
-          </button>
+          <LanguageSwitcher />
 
           <button className="relative text-brand-muted hover:text-gray-900">
             <Icon name="bell" className="w-6 h-6" />
@@ -50,20 +63,24 @@ export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, 
             </span>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 p-1 rounded-lg transition-colors"
+            onClick={onNavigateToProfile}
+          >
             {user.role === 'instructor' && (
               <button 
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   const isInstructorPage = window.location.pathname.includes('instructor');
                   window.location.href = isInstructorPage ? '/student-dashboard' : '/instructor-dashboard';
                 }}
-                className="mr-4 text-sm font-bold text-[#219BD5] hover:underline"
+                className="hidden lg:block mr-4 text-sm font-bold text-[#219BD5] hover:underline"
               >
                 {typeof window !== 'undefined' && window.location.pathname.includes('instructor') ? 'Switch to Student View' : 'Switch to Instructor View'}
               </button>
             )}
-            <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
-            <div>
+            <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 lg:w-10 lg:h-10 rounded-full" />
+            <div className="hidden sm:block">
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-gray-900 text-sm">{user.name}</p>
                 {user.role === 'admin' && (
@@ -72,7 +89,7 @@ export const Header: React.FC<HeaderProps> = ({ user, currentPage, searchQuery, 
                   </span>
                 )}
               </div>
-              <p className="text-xs text-brand-muted">{user.email}</p>
+              <p className="text-xs text-brand-muted truncate max-w-[120px]">{user.email}</p>
             </div>
           </div>
         </div>

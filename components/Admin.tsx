@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import type { Course, User } from '../types';
 import { Icon } from './Icon';
+import { useAppContext } from '../context/AppContext';
 
 interface AdminProps {
     users: User[];
@@ -24,6 +25,7 @@ const initialFormState = {
 };
 
 export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, onSelectCourseToEdit, onDeleteCourse }) => {
+    const { logAuditEvent } = useAppContext();
     const [courseData, setCourseData] = useState(initialFormState);
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -48,6 +50,7 @@ export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, on
         // Simulate API call
         setTimeout(() => {
             onAddNewCourse(courseData);
+            logAuditEvent('Course Created', `Created new course: ${courseData.title}`, 'course');
             setIsLoading(false);
             setIsSuccess(true);
             setCourseData(initialFormState);
@@ -142,29 +145,32 @@ export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, on
                 </form>
             </div>
             
-            <div className="bg-brand-surface rounded-xl p-6 md:p-8 border border-gray-200 shadow-sm">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Manage Existing Courses</h2>
+            <div className="bg-brand-surface rounded-xl p-4 lg:p-8 border border-gray-200 shadow-sm">
+                <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-6">Manage Existing Courses</h2>
                 <div className="space-y-4">
                     {courses.map(course => (
-                        <div key={course.id} className="bg-white p-4 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
-                            <div className="flex items-center gap-4">
-                                <img src={course.imageUrl} alt={course.title} className="w-24 h-16 object-cover rounded-md" />
-                                <div>
-                                    <h3 className="font-semibold text-gray-800">{course.title}</h3>
-                                    <p className="text-sm text-brand-muted">{course.category}</p>
+                        <div key={course.id} className="bg-white p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                                <img src={course.imageUrl} alt={course.title} className="w-20 h-14 lg:w-24 lg:h-16 object-cover rounded-md flex-shrink-0" />
+                                <div className="min-w-0">
+                                    <h3 className="font-semibold text-gray-800 text-sm lg:text-base truncate">{course.title}</h3>
+                                    <p className="text-xs lg:text-sm text-brand-muted">{course.category}</p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                                 <button 
                                     onClick={() => onSelectCourseToEdit(course)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary transition-colors"
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 lg:px-4 py-2 bg-brand-secondary text-white text-xs lg:text-sm font-semibold rounded-lg hover:bg-brand-primary transition-colors"
                                 >
                                     <Icon name="edit" className="w-4 h-4" />
                                     <span>Edit</span>
                                 </button>
                                 <button 
-                                    onClick={() => onDeleteCourse(course.id)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
+                                    onClick={() => {
+                                        onDeleteCourse(course.id);
+                                        logAuditEvent('Course Deleted', `Deleted course: ${course.title}`, 'course');
+                                    }}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 lg:px-4 py-2 bg-red-600 text-white text-xs lg:text-sm font-semibold rounded-lg hover:bg-red-700 transition-colors"
                                 >
                                     <Icon name="trash" className="w-4 h-4" />
                                     <span>Delete</span>

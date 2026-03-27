@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students';
+export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students' | 'Profile' | 'Audit Log';
 
 export interface User {
   id: number;
@@ -112,6 +112,35 @@ export interface CommunityTopic {
     id: number;
     title: string;
     messages: CommunityMessage[];
+}
+
+export interface AuditLog {
+  id: number;
+  userId: number;
+  userName: string;
+  action: string;
+  details: string;
+  timestamp: string;
+  type: 'user' | 'course' | 'system' | 'auth';
+}
+
+export interface PayoutRequest {
+    id: number;
+    instructorId: number;
+    amount: number;
+    accountName: string;
+    accountNumber: string;
+    bankName: string;
+    status: 'pending' | 'approved' | 'rejected';
+    timestamp: string;
+}
+
+export interface InstructorMessage {
+    id: number;
+    instructorId: number;
+    studentId: number;
+    text: string;
+    timestamp: string;
 }
 
 // FIX: Add this to handle PaystackPop on window, resolving the error in PaystackButton.tsx.

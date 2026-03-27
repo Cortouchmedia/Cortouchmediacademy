@@ -38,6 +38,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ user, onLogout }) =>
     { label: 'Admin Dashboard', icon: 'dashboard', path: '/admin' },
     { label: 'Manage Courses', icon: 'courses', path: '/admin/courses' },
     { label: 'Manage Users', icon: 'community', path: '/admin/users' },
+    { label: 'Audit Log', icon: 'settings', path: '/admin/audit-log' },
     { label: 'Reports', icon: 'trendingUp', path: '/admin/reports' },
   ];
 
@@ -60,6 +61,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ user, onLogout }) =>
       </nav>
       
       <div className="space-y-2 border-t border-gray-200 pt-4 mt-4">
+        <NavLink
+          iconName="user"
+          label="My Profile"
+          isActive={pathname === '/profile'}
+          onClick={() => router.push('/profile')}
+        />
         <NavLink
           iconName="logout"
           label="Back to Academy"

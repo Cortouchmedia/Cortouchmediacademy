@@ -39,6 +39,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       else if (path === 'certificates') handleNavigate('Certificates');
       else if (path === 'community') handleNavigate('Community');
       else if (path === 'settings') handleNavigate('Settings');
+      else if (path === 'profile') handleNavigate('Profile');
       else if (path === 'about') handleNavigate('About Us');
       else if (path === 'admin') handleNavigate('Admin');
       else if (path === 'course') {
@@ -64,8 +65,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoggedIn, currentUser, pathname, router]);
 
-  // Handle auth views if not logged in
   const [authView, setAuthView] = React.useState<'landing' | 'signIn' | 'signUp'>('landing');
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const isAdminRoute = pathname.startsWith('/admin');
 
   const handleNavigateToSignUp = () => {
     router.push('/signup');
@@ -115,28 +117,38 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  const isAdminRoute = pathname.startsWith('/admin');
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen font-sans bg-brand-bg">
-        <div className="flex min-h-screen">
-          {isAdminRoute && currentUser.role === 'admin' ? (
-            <AdminSidebar user={currentUser} onLogout={handleLogout} />
-          ) : (
-            <Sidebar 
-              user={currentUser} 
-              activePage={currentPage} 
-              onNavigate={(page) => {
-                handleNavigate(page);
-                let path = page.toLowerCase().replace(/\s+/g, '-');
-                if (path === 'dashboard') path = 'student-dashboard';
-                router.push(`/${path}`);
-              }} 
-              onLogout={handleLogout}
+        <div className="flex min-h-screen relative">
+          {/* Mobile Overlay */}
+          {isSidebarOpen && (
+            <div 
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              onClick={() => setIsSidebarOpen(false)}
             />
           )}
-          <main className="flex-1 flex flex-col">
+
+          <div className={`fixed inset-y-0 left-0 z-50 transform lg:relative lg:translate-x-0 transition duration-200 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:block`}>
+            {isAdminRoute && currentUser.role === 'admin' ? (
+              <AdminSidebar user={currentUser} onLogout={handleLogout} />
+            ) : (
+              <Sidebar 
+                user={currentUser} 
+                activePage={currentPage} 
+                onNavigate={(page) => {
+                  handleNavigate(page);
+                  let path = page.toLowerCase().replace(/\s+/g, '-');
+                  if (path === 'dashboard') path = 'student-dashboard';
+                  router.push(`/${path}`);
+                  setIsSidebarOpen(false);
+                }} 
+                onLogout={handleLogout}
+              />
+            )}
+          </div>
+
+          <main className="flex-1 flex flex-col min-w-0">
             <Header
               user={currentUser}
               currentPage={isAdminRoute ? 'Admin Portal' : searchQuery ? 'Search Results' : editingCourse ? 'Edit Course' : selectedCourse ? 'Course Details' : currentPage}
@@ -145,8 +157,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 handleSearchChange(query);
                 if (query) router.push('/search');
               }}
+              onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+              onNavigateToProfile={() => {
+                handleNavigate('Profile');
+                router.push('/profile');
+              }}
             />
-            <div className="p-8 overflow-y-auto flex-1">
+            <div className="p-4 lg:p-8 overflow-y-auto flex-1">
               {children}
             </div>
           </main>

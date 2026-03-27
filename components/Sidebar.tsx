@@ -4,6 +4,8 @@ import React from 'react';
 import type { Page, User } from '../types';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
+import { useAppContext } from '../context/AppContext';
+import { translations } from '../constants/translations';
 
 interface SidebarProps {
   user: User;
@@ -14,7 +16,7 @@ interface SidebarProps {
 
 const NavLink: React.FC<{
   iconName: string;
-  label: Page;
+  label: string;
   isActive: boolean;
   onClick: () => void;
 }> = ({ iconName, label, isActive, onClick }) => (
@@ -32,26 +34,30 @@ const NavLink: React.FC<{
 );
 
 export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onLogout }) => {
-  const studentNavItems: { label: Page; icon: string }[] = [
-    { label: 'Dashboard', icon: 'dashboard' },
-    { label: 'My Courses', icon: 'bookOpen' },
-    { label: 'Catalog', icon: 'courses' },
-    { label: 'Certificates', icon: 'certificates' },
-    { label: 'Community', icon: 'community' },
+  const { language } = useAppContext();
+  const t = translations[language];
+
+  const studentNavItems: { label: Page; icon: string; translation: string }[] = [
+    { label: 'Dashboard', icon: 'dashboard', translation: t.dashboard },
+    { label: 'My Courses', icon: 'bookOpen', translation: t.myCourses },
+    { label: 'Catalog', icon: 'courses', translation: t.catalog },
+    { label: 'Certificates', icon: 'certificates', translation: t.certificates },
+    { label: 'Community', icon: 'community', translation: t.community },
   ];
 
-  const instructorNavItems: { label: Page; icon: string }[] = [
-    { label: 'Instructor Dashboard', icon: 'dashboard' },
-    { label: 'Instructor Courses', icon: 'bookOpen' },
-    { label: 'Instructor Students', icon: 'community' },
-    { label: 'Instructor Revenue', icon: 'trendingUp' },
+  const instructorNavItems: { label: Page; icon: string; translation: string }[] = [
+    { label: 'Instructor Dashboard', icon: 'dashboard', translation: t.dashboard },
+    { label: 'Instructor Courses', icon: 'bookOpen', translation: t.myCourses },
+    { label: 'Instructor Students', icon: 'community', translation: t.community },
+    { label: 'Instructor Revenue', icon: 'trendingUp', translation: 'Revenue' },
   ];
 
   const navItems = user.role === 'instructor' ? instructorNavItems : studentNavItems;
 
-  const bottomNavItems: { label: Page; icon: string }[] = [
-      { label: 'Settings', icon: 'settings' },
-      { label: 'About Us', icon: 'info' }
+  const bottomNavItems: { label: Page; icon: string; translation: string }[] = [
+      { label: 'Profile', icon: 'user', translation: t.profile },
+      { label: 'Settings', icon: 'settings', translation: t.settings },
+      { label: 'About Us', icon: 'info', translation: t.aboutUs }
   ]
 
   return (
@@ -65,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, 
           <NavLink
             key={item.label}
             iconName={item.icon}
-            label={item.label}
+            label={item.translation}
             isActive={activePage === item.label}
             onClick={() => onNavigate(item.label)}
           />
@@ -77,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, 
             <NavLink
                 key={item.label}
                 iconName={item.icon}
-                label={item.label}
+                label={item.translation}
                 isActive={activePage === item.label}
                 onClick={() => onNavigate(item.label)}
             />
@@ -87,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, 
             className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-brand-muted hover:bg-red-500/10 hover:text-red-500 transition-colors"
         >
             <Icon name="logout" className="w-6 h-6" />
-            <span className="font-semibold">Logout</span>
+            <span className="font-semibold">{t.logout}</span>
         </button>
       </div>
     </aside>

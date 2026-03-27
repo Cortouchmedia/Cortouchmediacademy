@@ -4,6 +4,9 @@ import React, { useState, useEffect } from "react";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { CourseCard } from "./CourseCard";
+import { useAppContext } from "../context/AppContext";
+import { translations } from "../constants/translations";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import type { Course, CourseWithEnrollment } from "../types";
 
 interface LandingPageProps {
@@ -33,6 +36,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onNavigateToSignUp,
   courses,
 }) => {
+  const { language } = useAppContext();
+  const t = translations[language];
   const [scrolled, setScrolled] = useState(false);
   const [activeCategory, setActiveCategory] = useState("Web Development");
   const [searchQuery, setSearchQuery] = useState("");
@@ -768,7 +773,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
             <input 
               type="text" 
-              placeholder="Search for anything" 
+              placeholder={t.searchAnything} 
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
@@ -790,24 +795,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => document.getElementById('courses')?.scrollIntoView({ behavior: 'smooth' })}
               className="hidden sm:block px-3 py-2 text-sm font-medium text-gray-600 hover:text-[#219BD5]"
             >
-              Courses
+              {t.courses}
             </button>
             <button
               onClick={onNavigateToSignIn}
               className="px-4 py-2 text-sm font-bold text-[#219BD5] border border-[#219BD5] hover:bg-[#219BD5]/10 transition-colors"
             >
-              Log in
+              {t.login}
             </button>
             <button
               onClick={onNavigateToSignUp}
               className="px-4 py-2 bg-[#219BD5] text-white text-sm font-bold hover:bg-[#1a7fb0] transition-all"
             >
-              Sign up
+              {t.signup}
             </button>
-            <button className="p-2 border border-gray-300 hover:bg-gray-100 transition-colors">
-              <Icon name="globe" className="w-5 h-5 text-gray-600" />
-            </button>
-            
+            <LanguageSwitcher showLabel={false} />
           </div>
         </div>
       </header>
@@ -826,15 +828,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16 h-full flex items-center relative z-10">
             <div className="bg-white p-8 lg:p-10 rounded-lg shadow-2xl max-w-md">
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4 leading-tight">
-                Learning that gets you
+                {t.heroTitle}
               </h1>
               <p className="text-gray-600 mb-6 text-base leading-relaxed">
-                Skills for your present (and your future). Get started with us today.
+                {t.heroSubtitle}
               </p>
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="What do you want to learn?" 
+                  placeholder={t.whatToLearn} 
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
@@ -854,7 +856,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Trust Section */}
         <section className="py-12 bg-gray-50 border-b border-gray-200">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
-            <p className="text-center text-gray-600 mb-8 text-lg">Trusted by over 15,000 companies and millions of learners worldwide</p>
+            <p className="text-center text-gray-600 mb-8 text-lg">{t.trustedBy}</p>
             <div className="flex flex-wrap justify-center items-center gap-8 lg:gap-16 opacity-60">
               {['Volkswagen', 'Samsung', 'Cisco', 'AT&T', 'Procter & Gamble', 'Hewlett Packard'].map(partner => (
                 <div key={partner} className="text-xl lg:text-2xl font-bold text-gray-400 font-serif">{partner}</div>
@@ -868,21 +870,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-3xl font-bold text-gray-900">
-                {isSearching ? `Search Results for "${searchQuery}"` : "A broad selection of courses"}
+                {isSearching ? `${t.searchResultsFor} "${searchQuery}"` : t.broadSelection}
               </h2>
               {isSearching && (
                 <button
                   onClick={clearSearch}
                   className="text-[#219BD5] hover:text-[#1a7fb0] font-semibold text-sm"
                 >
-                  Clear Search
+                  {t.clearSearch}
                 </button>
               )}
             </div>
             <p className="text-lg text-gray-600 mb-8">
               {isSearching 
-                ? `Found ${searchResults.length} course${searchResults.length !== 1 ? 's' : ''} matching your search`
-                : "Choose from over 210,000 online video courses with new additions published every month"}
+                ? t.foundCourses.replace('{count}', searchResults.length.toString())
+                : t.selectionSubtitle}
             </p>
             
             {/* Category Tabs - Hide when searching */}
@@ -898,7 +900,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         : 'text-gray-500 hover:text-[#219BD5]'
                     }`}
                   >
-                    {cat}
+                    {cat === "Python" ? "Python" 
+                      : cat === "Excel" ? "Excel"
+                      : cat === "Web Development" ? t.categoryDevelopment
+                      : cat === "JavaScript" ? "JavaScript"
+                      : cat === "Data Science" ? "Data Science"
+                      : cat === "Amazon AWS" ? "Amazon AWS"
+                      : t.categoryDesign}
                   </button>
                 ))}
               </div>
@@ -910,39 +918,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="max-w-3xl mb-8">
                   <h3 className="text-2xl font-bold text-gray-900 mb-4">
                     {activeCategory === "Web Development" 
-                      ? "Build websites with HTML, CSS, JavaScript, and more"
+                      ? t.catWebTitle
                       : activeCategory === "Python"
-                      ? "Master Python programming for data science, automation, and web development"
+                      ? t.catPythonTitle
                       : activeCategory === "Excel"
-                      ? "Excel skills for business, data analysis, and financial modeling"
+                      ? t.catExcelTitle
                       : activeCategory === "JavaScript"
-                      ? "Learn modern JavaScript from fundamentals to advanced concepts"
+                      ? t.catJSTitle
                       : activeCategory === "Data Science"
-                      ? "Data science, machine learning, and AI fundamentals"
+                      ? t.catDSTitle
                       : activeCategory === "Amazon AWS"
-                      ? "AWS cloud computing, solutions architecture, and DevOps"
-                      : "Drawing fundamentals, digital art, and creative illustration"}
+                      ? t.catAWSTitle
+                      : t.catDrawTitle}
                   </h3>
                   <p className="text-gray-600 mb-6">
                     {activeCategory === "Web Development" 
-                      ? "The world of web development is as wide as the internet itself. Much of our social and economic lives play out on the internet, which of course, is a whole lot of websites."
+                      ? t.catWebDesc
                       : activeCategory === "Python"
-                      ? "Python is one of the most versatile programming languages, used for web development, data science, automation, and artificial intelligence."
+                      ? t.catPythonDesc
                       : activeCategory === "Excel"
-                      ? "Excel is the world's most powerful spreadsheet software. Master it for business analytics, financial modeling, and data visualization."
+                      ? t.catExcelDesc
                       : activeCategory === "JavaScript"
-                      ? "JavaScript powers the modern web. Learn it to build interactive websites, web apps, and full-stack applications."
+                      ? t.catJSDesc
                       : activeCategory === "Data Science"
-                      ? "Data science combines statistics, programming, and domain expertise to extract insights from data. Master the tools of the trade."
+                      ? t.catDSDesc
                       : activeCategory === "Amazon AWS"
-                      ? "Amazon Web Services is the leading cloud platform. Learn to build, deploy, and scale applications in the cloud."
-                      : "Drawing is a fundamental skill for artists and designers. Learn techniques from basic sketching to advanced digital illustration."}
+                      ? t.catAWSDesc
+                      : t.catDrawDesc}
                   </p>
                   <button 
                     onClick={() => setActiveCategory(activeCategory)}
                     className="px-4 py-2 border border-[#219BD5] text-[#219BD5] font-bold text-sm hover:bg-[#219BD5] hover:text-white transition-colors"
                   >
-                    Explore {activeCategory}
+                    {t.explore} {activeCategory === "Web Development" ? t.categoryDevelopment : activeCategory === "Drawing" ? t.categoryDesign : activeCategory}
                   </button>
                 </div>
               )}
@@ -968,15 +976,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               ) : (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">🔍</div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">No courses found</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{t.noCoursesFound}</h3>
                   <p className="text-gray-500 mb-4">
-                    We couldn't find any courses matching "{searchQuery}"
+                    {t.noMatchesFor.replace('{query}', searchQuery)}
                   </p>
                   <button
                     onClick={clearSearch}
                     className="px-4 py-2 bg-[#219BD5] text-white rounded-lg hover:bg-[#1a7fb0] transition-colors"
                   >
-                    Clear Search
+                    {t.clearSearch}
                   </button>
                 </div>
               )}
@@ -987,17 +995,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Top Categories */}
         <section className="py-16 bg-white">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8">Top categories</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-8">{t.topCategories}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { name: 'Design', img: 'https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Development', img: 'https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Marketing', img: 'https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'IT and Software', img: 'https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Personal Development', img: 'https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Business', img: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Photography', img: 'https://images.pexels.com/photos/1029757/pexels-photo-1029757.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
-                { name: 'Music', img: 'https://images.pexels.com/photos/164745/pexels-photo-164745.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryDesign, img: 'https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryDevelopment, img: 'https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryMarketing, img: 'https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryIT, img: 'https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryPersonalDev, img: 'https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryBusiness, img: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryPhotography, img: 'https://images.pexels.com/photos/1029757/pexels-photo-1029757.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
+                { name: t.categoryMusic, img: 'https://images.pexels.com/photos/164745/pexels-photo-164745.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&fit=crop' },
               ].map(cat => (
                 <div key={cat.name} className="group cursor-pointer">
                   <div className="aspect-square overflow-hidden mb-2">
@@ -1018,22 +1026,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="w-12 h-12 bg-[#219BD5] rounded-full flex items-center justify-center mb-4">
                   <Icon name="play" className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">210,000 online courses</h3>
-                <p className="text-sm text-gray-600">Enjoy a variety of fresh topics</p>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{t.onlineCourses}</h3>
+                <p className="text-sm text-gray-600">{t.freshTopics}</p>
               </div>
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 bg-[#219BD5] rounded-full flex items-center justify-center mb-4">
                   <Icon name="star" className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Expert instruction</h3>
-                <p className="text-sm text-gray-600">Find the right instructor for you</p>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{t.expertInstruction}</h3>
+                <p className="text-sm text-gray-600">{t.findInstructor}</p>
               </div>
               <div className="flex flex-col items-center">
                 <div className="w-12 h-12 bg-[#219BD5] rounded-full flex items-center justify-center mb-4">
                   <Icon name="shield" className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Lifetime access</h3>
-                <p className="text-sm text-gray-600">Learn on your schedule</p>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">{t.lifetimeAccess}</h3>
+                <p className="text-sm text-gray-600">{t.learnSchedule}</p>
               </div>
             </div>
           </div>
@@ -1047,13 +1055,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <img src="https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=600&h=450&fit=crop" alt="Instructor teaching" className="w-full rounded-sm shadow-lg" referrerPolicy="no-referrer" />
               </div>
               <div className="lg:w-1/2 text-center lg:text-left">
-                <h2 className="text-3xl font-serif font-bold text-gray-900 mb-4">Become an instructor</h2>
-                <p className="text-lg text-gray-600 mb-8">Instructors from around the world teach millions of students on Cortouch. We provide the tools and skills to teach what you love.</p>
+                <h2 className="text-3xl font-serif font-bold text-gray-900 mb-4">{t.becomeInstructor}</h2>
+                <p className="text-lg text-gray-600 mb-8">{t.instructorSubtitle}</p>
                 <button
                   onClick={onNavigateToSignUp}
                   className="px-8 py-3 bg-[#219BD5] text-white font-bold hover:bg-[#1a7fb0] transition-all"
                 >
-                  Start teaching today
+                  {t.startTeaching}
                 </button>
               </div>
             </div>
@@ -1070,7 +1078,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <Logo size="lg" />
               </div>
               <p className="text-gray-500 max-w-sm mb-8">
-                Empowering the next generation of digital creators through world-class education and practical training.
+                {t.footerTagline}
               </p>
               <div className="flex gap-4">
                 <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="Facebook">
@@ -1091,16 +1099,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
             <div>
-              <h4 className="font-bold text-gray-900 mb-6">Quick Links</h4>
+              <h4 className="font-bold text-gray-900 mb-6">{t.quickLinks}</h4>
               <ul className="space-y-4 text-gray-500">
-                <li><a href="#" className="hover:text-[#219BD5] transition-colors">Home</a></li>
-                <li><a href="#courses" className="hover:text-[#219BD5] transition-colors">Courses</a></li>
-                <li><a href="#features" className="hover:text-[#219BD5] transition-colors">Features</a></li>
-                <li><a href="#about" className="hover:text-[#219BD5] transition-colors">About Us</a></li>
+                <li><a href="#" className="hover:text-[#219BD5] transition-colors">{t.home}</a></li>
+                <li><a href="#courses" className="hover:text-[#219BD5] transition-colors">{t.courses}</a></li>
+                <li><a href="#features" className="hover:text-[#219BD5] transition-colors">{t.features}</a></li>
+                <li><a href="#about" className="hover:text-[#219BD5] transition-colors">{t.aboutUsTitle}</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold text-gray-900 mb-6">Contact</h4>
+              <h4 className="font-bold text-gray-900 mb-6">{t.contact}</h4>
               <ul className="space-y-4 text-gray-500">
                 <li>info@cortouchmedia.com.ng</li>
                 <li>+2348067473244</li>
@@ -1114,11 +1122,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <p>&copy; {new Date().getFullYear()} Cortouch Media, Inc.</p>
             </div>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-              <a href="#" className="hover:text-[#219BD5] transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">Cookie Settings</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">Sitemap</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">Accessibility statement</a>
+              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.privacyPolicy}</a>
+              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.termsOfService}</a>
+              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.cookieSettings}</a>
+              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.sitemap}</a>
+              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.accessibilityStatement}</a>
             </div>
           </div>
         </div>

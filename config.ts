@@ -11,7 +11,7 @@
 // Example: export const PAYSTACK_PUBLIC_KEY = 'pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 //
 
-export const PAYSTACK_PUBLIC_KEY = 'pk_test_REPLACE_WITH_YOUR_KEY';
+export const PAYSTACK_PUBLIC_KEY = 'pk_live_0a18ecbda9801af17e6c38bc759e33225286a4e5';
 
 // ====================================================================
 // LOGO CONFIGURATION
