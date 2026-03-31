@@ -42,6 +42,17 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, isRecommended = 
           {course.instructor || "Cortouch Media Academy"}
         </p>
 
+        <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-2">
+          <div className="flex items-center gap-1">
+            <Icon name="clock" className="w-3 h-3 text-[#219BD5]" />
+            <span>{course.duration || "10h 30m"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Icon name="bookOpen" className="w-3 h-3 text-[#219BD5]" />
+            <span>{course.modules || 12} modules</span>
+          </div>
+        </div>
+
         <div className="flex items-center gap-1 mb-1">
           <span className="text-xs font-bold text-brand-secondary">
             {(course.rating || 4.5).toFixed(1)}

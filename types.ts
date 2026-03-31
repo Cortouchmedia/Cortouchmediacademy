@@ -23,6 +23,7 @@ export interface Project {
   title: string;
   description: string;
   isSubmitted: boolean;
+  submissionLink?: string;
   score?: number;
   feedback?: string;
   isGrading?: boolean;

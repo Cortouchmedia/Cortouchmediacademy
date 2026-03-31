@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Icon } from './Icon';
 import { useAppContext } from '../context/AppContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from "framer-motion";
 
 const languages = [
   { code: 'en', name: 'English', flag: '🇺🇸' },

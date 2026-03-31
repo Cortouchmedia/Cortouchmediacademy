@@ -1,14 +1,40 @@
 "use client";
 
-import { useEffect } from 'react';
+import React from 'react';
+import { PublicCoursesPage } from '../../components/PublicCoursesPage';
+import { useAppContext } from '../../context/AppContext';
 import { useRouter } from 'next/navigation';
+import type { Course } from '../../types';
 
-export default function CoursesRedirect() {
+export default function CoursesPage() {
+  const { 
+    coursesWithEnrollmentStatus, 
+    currentUser, 
+    handleEnrollmentSuccess,
+    handleProjectSubmit,
+    handleToggleLessonComplete,
+    handleSendCourseMessage
+  } = useAppContext();
   const router = useRouter();
 
-  useEffect(() => {
-    router.replace('/catalog');
-  }, [router]);
+  const handleNavigateToSignIn = () => {
+    router.push('/login');
+  };
 
-  return null;
+  const handleNavigateToSignUp = () => {
+    router.push('/signup');
+  };
+
+  return (
+    <PublicCoursesPage 
+      allCourses={coursesWithEnrollmentStatus}
+      user={currentUser}
+      onNavigateToSignIn={handleNavigateToSignIn} 
+      onNavigateToSignUp={handleNavigateToSignUp} 
+      onEnrollmentSuccess={handleEnrollmentSuccess}
+      onProjectSubmit={handleProjectSubmit}
+      onToggleLessonComplete={handleToggleLessonComplete}
+      onSendCourseMessage={handleSendCourseMessage}
+    />
+  );
 }

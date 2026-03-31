@@ -46,7 +46,7 @@ interface AppContextType {
   handleUserAdd: (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => void;
   handleEnrollmentSuccess: (courseId: number) => void;
   handleToggleLessonComplete: (courseId: number, lessonId: number) => void;
-  handleProjectSubmit: (courseId: number, projectId: number) => Promise<void>;
+  handleProjectSubmit: (courseId: number, projectId: number, submissionLink: string) => Promise<void>;
   handleSendMessage: (text: string) => Promise<void>;
   handleSendCourseMessage: (courseId: number, text: string) => Promise<void>;
   logAuditEvent: (action: string, details: string, type: AuditLog['type']) => void;
@@ -64,7 +64,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const ai = process.env.NEXT_PUBLIC_GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY }) : null;
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -212,7 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     lesson.id === lessonId ? { ...lesson, isCompleted: !lesson.isCompleted } : lesson
                 );
                 const completedLessons = updatedLessons.filter(l => l.isCompleted).length;
-                const moduleProgress = Math.round((completedLessons / updatedLessons.length) * 100);
+                const moduleProgress = updatedLessons.length > 0 ? Math.round((completedLessons / updatedLessons.length) * 100) : 0;
                 return { ...module, lessons: updatedLessons, progress: moduleProgress };
             });
 
@@ -229,18 +229,162 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     setCourses(updatedCourses);
     if (courseToComplete) setCompletedCourse(courseToComplete);
+    logAuditEvent('Lesson Toggled', `Lesson ID: ${lessonId} toggled for course ID: ${courseId}`, 'course');
   };
 
-  const handleProjectSubmit = async (courseId: number, projectId: number) => {
-    // Logic from App.tsx...
+  const handleProjectSubmit = async (courseId: number, projectId: number, submissionLink: string) => {
+    setCourses(prev => prev.map(course => {
+      if (course.id === courseId) {
+        const updatedProjects = course.projects.map(project =>
+          project.id === projectId ? { ...project, isGrading: true, submissionLink } : project
+        );
+        const updatedCourse = { ...course, projects: updatedProjects };
+        if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
+        return updatedCourse;
+      }
+      return course;
+    }));
+
+    // Simulate AI Grading
+    setTimeout(() => {
+      setCourses(prev => prev.map(course => {
+        if (course.id === courseId) {
+          const updatedProjects = course.projects.map(project => {
+            if (project.id === projectId) {
+              const score = Math.floor(Math.random() * 21) + 80; // 80-100
+              return {
+                ...project,
+                isSubmitted: true,
+                isGrading: false,
+                score,
+                feedback: `Great job on this project! Your implementation of the core concepts is solid. Score: ${score}%`
+              };
+            }
+            return project;
+          });
+          const updatedCourse = { ...course, projects: updatedProjects };
+          if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
+          return updatedCourse;
+        }
+        return course;
+      }));
+      logAuditEvent('Project Submitted', `Project ID: ${projectId} submitted for course ID: ${courseId} with link: ${submissionLink}`, 'course');
+    }, 2000);
   };
 
   const handleSendMessage = async (text: string) => {
-    // Logic from App.tsx...
+    const userMsg: ChatMessage = {
+      id: Date.now(),
+      text,
+      sender: 'user',
+      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+    };
+    
+    setMessages(prev => [...prev, userMsg]);
+    setIsBotTyping(true);
+
+    try {
+      let responseText = "I'm sorry, I'm having trouble connecting to my brain right now. Please try again later!";
+      
+      if (ai) {
+        const result = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: text
+        });
+        responseText = result.text || "I'm sorry, I couldn't generate a response.";
+      } else {
+        responseText = "That's a great question! As an AI assistant for Cortouch Media Academy, I'm here to help you with your learning. Could you tell me more about what you're looking for?";
+      }
+
+      const botMsg: ChatMessage = {
+        id: Date.now() + 1,
+        text: responseText,
+        sender: 'bot',
+        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+      };
+      setMessages(prev => [...prev, botMsg]);
+    } catch (error) {
+      console.error("AI Error:", error);
+      const errorMsg: ChatMessage = {
+        id: Date.now() + 2,
+        text: "I encountered an error while processing your request. Please try again.",
+        sender: 'bot',
+        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsBotTyping(false);
+    }
   };
 
   const handleSendCourseMessage = async (courseId: number, text: string) => {
-    // Logic from App.tsx...
+    const userMsg: ChatMessage = {
+      id: Date.now(),
+      text,
+      sender: 'user',
+      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+    };
+
+    // Add user message immediately
+    setCourses(prev => prev.map(course => {
+      if (course.id === courseId) {
+        const updatedHistory = [...(course.chatHistory || []), userMsg];
+        const updatedCourse = { ...course, chatHistory: updatedHistory, isAssistantTyping: true };
+        if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
+        return updatedCourse;
+      }
+      return course;
+    }));
+
+    try {
+      let responseText = "I'm here to help you with this specific course. What would you like to know?";
+      
+      if (ai) {
+        const course = courses.find(c => c.id === courseId);
+        const prompt = `You are a helpful teaching assistant for the course "${course?.title}". The student asks: ${text}`;
+        const result = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: prompt
+        });
+        responseText = result.text || "I'm sorry, I couldn't generate a response.";
+      }
+
+      const botMsg: ChatMessage = {
+        id: Date.now() + 1,
+        text: responseText,
+        sender: 'bot',
+        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+      };
+
+      setCourses(prev => prev.map(course => {
+        if (course.id === courseId) {
+          // Use the history from the course object in the map to ensure we don't lose the user message
+          const updatedHistory = [...(course.chatHistory || []), botMsg];
+          const updatedCourse = { ...course, chatHistory: updatedHistory, isAssistantTyping: false };
+          if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
+          return updatedCourse;
+        }
+        return course;
+      }));
+    } catch (error) {
+      console.error("AI Error:", error);
+      setCourses(prev => prev.map(course => {
+        if (course.id === courseId) {
+          const errorMsg: ChatMessage = {
+            id: Date.now() + 2,
+            text: "I encountered an error. Please try again.",
+            sender: 'bot',
+            timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+          };
+          return { 
+            ...course, 
+            chatHistory: [...(course.chatHistory || []), errorMsg],
+            isAssistantTyping: false 
+          };
+        }
+        return course;
+      }));
+    }
   };
 
   const handleInstructorCourseAdd = (courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>, initialModules?: { title: string }[]) => {

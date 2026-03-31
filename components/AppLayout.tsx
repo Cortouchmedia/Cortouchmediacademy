@@ -5,6 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { AdminSidebar } from './AdminSidebar';
 import { Header } from './Header';
+import { Footer } from './Footer';
 import { ChatWidget } from './ChatWidget';
 import { CompletionModal } from './CompletionModal';
 import ErrorBoundary from './ErrorBoundary';
@@ -50,7 +51,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         // Similar for search
       }
     }
-  }, [pathname, isLoggedIn, currentUser]);
+  }, [pathname, isLoggedIn, currentUser, handleNavigate]);
 
   // Handle redirects based on role when on root path
   React.useEffect(() => {
@@ -108,6 +109,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       }} onNavigateToSignIn={handleNavigateToSignIn} />;
     }
     
+    if (pathname.startsWith('/courses')) {
+      return children;
+    }
+
     // Default landing page for other routes when not logged in
     return <LandingPage onNavigateToSignIn={handleNavigateToSignIn} onNavigateToSignUp={handleNavigateToSignUp} courses={courses} />;
   }
@@ -166,6 +171,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="p-4 lg:p-8 overflow-y-auto flex-1">
               {children}
             </div>
+            <Footer />
           </main>
           {!isAdminRoute && (
             <ChatWidget

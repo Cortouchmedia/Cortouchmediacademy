@@ -7,7 +7,7 @@ import { PaystackButton } from './PaystackButton';
 import { motion } from 'framer-motion';
 
 interface CourseLandingPageProps {
-    user: User;
+    user: User | null;
     course: CourseWithEnrollment;
     onBack: () => void;
     onEnrollmentSuccess: (courseId: number) => void;
@@ -79,13 +79,22 @@ export const CourseLandingPage: React.FC<CourseLandingPageProps> = ({
 
                             <div className="flex flex-col sm:flex-row items-center gap-4">
                                 <div className="w-full sm:w-auto">
-                                    <PaystackButton
-                                        email={user.email}
-                                        amount={course.price}
-                                        onSuccess={handleEnroll}
-                                        onClose={() => console.log('Payment closed')}
-                                        metadata={{ course_id: course.id, user_id: user.id }}
-                                    />
+                                    {user ? (
+                                        <PaystackButton
+                                            email={user.email}
+                                            amount={course.price}
+                                            onSuccess={handleEnroll}
+                                            onClose={() => console.log('Payment closed')}
+                                            metadata={{ course_id: course.id, user_id: user.id }}
+                                        />
+                                    ) : (
+                                        <button 
+                                            onClick={() => window.location.href = '/login'}
+                                            className="w-full sm:w-auto px-8 py-4 bg-brand-primary text-white font-bold rounded-xl hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20"
+                                        >
+                                            Sign in to Enroll
+                                        </button>
+                                    )}
                                 </div>
                                 <p className="text-sm text-gray-500">
                                     One-time payment for lifetime access
@@ -281,13 +290,22 @@ export const CourseLandingPage: React.FC<CourseLandingPageProps> = ({
                             Join thousands of students and start learning {course.title} today.
                         </p>
                         <div className="flex flex-col items-center gap-4">
-                            <PaystackButton
-                                email={user.email}
-                                amount={course.price}
-                                onSuccess={handleEnroll}
-                                onClose={() => console.log('Payment closed')}
-                                metadata={{ course_id: course.id, user_id: user.id }}
-                            />
+                            {user ? (
+                                <PaystackButton
+                                    email={user.email}
+                                    amount={course.price}
+                                    onSuccess={handleEnroll}
+                                    onClose={() => console.log('Payment closed')}
+                                    metadata={{ course_id: course.id, user_id: user.id }}
+                                />
+                            ) : (
+                                <button 
+                                    onClick={() => window.location.href = '/login'}
+                                    className="px-8 py-4 bg-brand-primary text-white font-bold rounded-xl hover:bg-brand-primary/90 transition-all shadow-lg shadow-brand-primary/20"
+                                >
+                                    Sign in to Enroll
+                                </button>
+                            )}
                             <p className="text-sm text-gray-500">30-day money-back guarantee</p>
                         </div>
                     </div>

@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 
 import { AppProvider } from "../context/AppContext";
 import { AppLayout } from "../components/AppLayout";
+import PaystackScript from "../components/PaystackScript";
 
 export default function RootLayout({
   children,
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable} font-sans`}>
+      <PaystackScript />
         <AppProvider>
           <AppLayout>
             {children}

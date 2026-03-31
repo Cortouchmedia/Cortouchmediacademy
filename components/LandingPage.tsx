@@ -4,10 +4,14 @@ import React, { useState, useEffect } from "react";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { CourseCard } from "./CourseCard";
+import { PublicHeader } from "./PublicHeader";
+import { Footer } from "./Footer";
 import { useAppContext } from "../context/AppContext";
 import { translations } from "../constants/translations";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import type { Course, CourseWithEnrollment } from "../types";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface LandingPageProps {
   onNavigateToSignIn: () => void;
@@ -38,6 +42,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const { language } = useAppContext();
   const t = translations[language];
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
   const [activeCategory, setActiveCategory] = useState("Web Development");
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,677 +57,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Sample category-specific courses matching the Course type
+  // Get courses by category from the courses prop
   const getCoursesByCategory = (category: string): Course[] => {
-    const categoryCourses: Record<string, Course[]> = {
-      "Python": [
-        { 
-          id: 1001, 
-          title: "Complete Python Bootcamp", 
-          category: "Python",
-          instructor: "Jose Portilla", 
-          duration: "32 hours",
-          description: "Learn Python from scratch and build real-world applications",
-          price: 84.99, 
-          rating: 4.6,
-          enrollmentCount: 125000,
-          imageUrl: "https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 25,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 1002, 
-          title: "Python for Data Science", 
-          category: "Python",
-          instructor: "Dr. Angela Yu", 
-          duration: "28 hours",
-          description: "Master data analysis and visualization with Python",
-          price: 89.99, 
-          rating: 4.8,
-          enrollmentCount: 89000,
-          imageUrl: "https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 20,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 1003, 
-          title: "Automate with Python", 
-          category: "Python",
-          instructor: "Al Sweigart", 
-          duration: "24 hours",
-          description: "Automate repetitive tasks and boost productivity",
-          price: 74.99, 
-          rating: 4.7,
-          enrollmentCount: 67000,
-          imageUrl: "https://images.pexels.com/photos/1181243/pexels-photo-1181243.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 18,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 1004, 
-          title: "Python Django Framework", 
-          category: "Python",
-          instructor: "Maximilian Schwarzmüller", 
-          duration: "36 hours",
-          description: "Build robust web applications with Django",
-          price: 94.99, 
-          rating: 4.9,
-          enrollmentCount: 45000,
-          imageUrl: "https://images.pexels.com/photos/11035539/pexels-photo-11035539.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 30,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 1005, 
-          title: "Machine Learning with Python", 
-          category: "Python",
-          instructor: "Andrew Ng", 
-          duration: "40 hours",
-          description: "Master machine learning algorithms and techniques",
-          price: 99.99, 
-          rating: 4.9,
-          enrollmentCount: 112000,
-          imageUrl: "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 35,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "Excel": [
-        { 
-          id: 2001, 
-          title: "Excel Skills for Business", 
-          category: "Excel",
-          instructor: "Macquarie University", 
-          duration: "28 hours",
-          description: "Master Excel for business analytics",
-          price: 79.99, 
-          rating: 4.7,
-          enrollmentCount: 156000,
-          imageUrl: "https://images.pexels.com/photos/669615/pexels-photo-669615.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 22,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 2002, 
-          title: "Advanced Excel Formulas", 
-          category: "Excel",
-          instructor: "Chris Dutton", 
-          duration: "20 hours",
-          description: "Master complex Excel formulas and functions",
-          price: 69.99, 
-          rating: 4.8,
-          enrollmentCount: 78000,
-          imageUrl: "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 16,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 2003, 
-          title: "Excel Data Analysis", 
-          category: "Excel",
-          instructor: "Pavan Lalwani", 
-          duration: "24 hours",
-          description: "Analyze and visualize data like a pro",
-          price: 84.99, 
-          rating: 4.6,
-          enrollmentCount: 92000,
-          imageUrl: "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 19,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 2004, 
-          title: "Excel VBA Programming", 
-          category: "Excel",
-          instructor: "Kyle Pew", 
-          duration: "30 hours",
-          description: "Automate Excel tasks with VBA macros",
-          price: 94.99, 
-          rating: 4.7,
-          enrollmentCount: 54000,
-          imageUrl: "https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 24,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 2005, 
-          title: "Excel Dashboard Design", 
-          category: "Excel",
-          instructor: "Mynda Treacy", 
-          duration: "22 hours",
-          description: "Create stunning interactive dashboards",
-          price: 89.99, 
-          rating: 4.8,
-          enrollmentCount: 43000,
-          imageUrl: "https://images.pexels.com/photos/669610/pexels-photo-669610.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 18,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "Web Development": [
-        { 
-          id: 3001, 
-          title: "The Complete Web Developer Course", 
-          category: "Web Development",
-          instructor: "Dr. Angela Yu", 
-          duration: "55 hours",
-          description: "Become a full-stack web developer",
-          price: 94.99, 
-          rating: 4.8,
-          enrollmentCount: 245000,
-          imageUrl: "https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 45,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 3002, 
-          title: "Modern React with Redux", 
-          category: "Web Development",
-          instructor: "Stephen Grider", 
-          duration: "48 hours",
-          description: "Master React and Redux for modern web apps",
-          price: 89.99, 
-          rating: 4.7,
-          enrollmentCount: 134000,
-          imageUrl: "https://images.pexels.com/photos/11035539/pexels-photo-11035539.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 40,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 3003, 
-          title: "Node.js Advanced Concepts", 
-          category: "Web Development",
-          instructor: "Maximilian Schwarzmüller", 
-          duration: "35 hours",
-          description: "Build scalable backend applications",
-          price: 84.99, 
-          rating: 4.9,
-          enrollmentCount: 89000,
-          imageUrl: "https://images.pexels.com/photos/1181243/pexels-photo-1181243.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 28,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 3004, 
-          title: "CSS Grid & Flexbox Mastery", 
-          category: "Web Development",
-          instructor: "Colt Steele", 
-          duration: "20 hours",
-          description: "Create responsive layouts with modern CSS",
-          price: 69.99, 
-          rating: 4.8,
-          enrollmentCount: 112000,
-          imageUrl: "https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 16,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 3005, 
-          title: "TypeScript for Professionals", 
-          category: "Web Development",
-          instructor: "Brad Traversy", 
-          duration: "25 hours",
-          description: "Master TypeScript for large-scale applications",
-          price: 79.99, 
-          rating: 4.7,
-          enrollmentCount: 67000,
-          imageUrl: "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 20,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "JavaScript": [
-        { 
-          id: 4001, 
-          title: "JavaScript: The Advanced Concepts", 
-          category: "JavaScript",
-          instructor: "Andrei Neagoie", 
-          duration: "42 hours",
-          description: "Master modern JavaScript from fundamentals to advanced concepts",
-          price: 89.99, 
-          rating: 4.8,
-          enrollmentCount: 156000,
-          imageUrl: "https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 35,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 4002, 
-          title: "ES6 JavaScript Mastery", 
-          category: "JavaScript",
-          instructor: "Jonas Schmedtmann", 
-          duration: "30 hours",
-          description: "Learn modern ES6+ features and best practices",
-          price: 79.99, 
-          rating: 4.9,
-          enrollmentCount: 98000,
-          imageUrl: "https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 25,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 4003, 
-          title: "Async JavaScript", 
-          category: "JavaScript",
-          instructor: "Stephen Grider", 
-          duration: "18 hours",
-          description: "Master promises, async/await, and asynchronous patterns",
-          price: 74.99, 
-          rating: 4.7,
-          enrollmentCount: 67000,
-          imageUrl: "https://images.pexels.com/photos/1181243/pexels-photo-1181243.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 15,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 4004, 
-          title: "JavaScript Design Patterns", 
-          category: "JavaScript",
-          instructor: "Maximilian Schwarzmüller", 
-          duration: "28 hours",
-          description: "Learn professional design patterns in JavaScript",
-          price: 84.99, 
-          rating: 4.8,
-          enrollmentCount: 45000,
-          imageUrl: "https://images.pexels.com/photos/11035539/pexels-photo-11035539.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 22,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 4005, 
-          title: "React with JavaScript", 
-          category: "JavaScript",
-          instructor: "Dr. Angela Yu", 
-          duration: "45 hours",
-          description: "Build modern React applications with pure JavaScript",
-          price: 94.99, 
-          rating: 4.9,
-          enrollmentCount: 123000,
-          imageUrl: "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 38,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "Data Science": [
-        { 
-          id: 5001, 
-          title: "Data Science Bootcamp", 
-          category: "Data Science",
-          instructor: "Jose Portilla", 
-          duration: "50 hours",
-          description: "Complete data science curriculum with Python",
-          price: 99.99, 
-          rating: 4.7,
-          enrollmentCount: 187000,
-          imageUrl: "https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 45,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 5002, 
-          title: "Machine Learning A-Z", 
-          category: "Data Science",
-          instructor: "Kirill Eremenko", 
-          duration: "45 hours",
-          description: "Learn machine learning algorithms from A to Z",
-          price: 94.99, 
-          rating: 4.8,
-          enrollmentCount: 234000,
-          imageUrl: "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 40,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 5003, 
-          title: "Python for Data Science", 
-          category: "Data Science",
-          instructor: "Dr. Angela Yu", 
-          duration: "35 hours",
-          description: "Master Python for data analysis and visualization",
-          price: 89.99, 
-          rating: 4.8,
-          enrollmentCount: 156000,
-          imageUrl: "https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 30,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 5004, 
-          title: "Deep Learning Specialization", 
-          category: "Data Science",
-          instructor: "Andrew Ng", 
-          duration: "60 hours",
-          description: "Master deep learning and neural networks",
-          price: 79.99, 
-          rating: 4.9,
-          enrollmentCount: 178000,
-          imageUrl: "https://images.pexels.com/photos/11035539/pexels-photo-11035539.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 50,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 5005, 
-          title: "SQL for Data Analysis", 
-          category: "Data Science",
-          instructor: "Maven Analytics", 
-          duration: "25 hours",
-          description: "Master SQL for data extraction and analysis",
-          price: 69.99, 
-          rating: 4.7,
-          enrollmentCount: 89000,
-          imageUrl: "https://images.pexels.com/photos/669615/pexels-photo-669615.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 20,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "Amazon AWS": [
-        { 
-          id: 6001, 
-          title: "AWS Certified Solutions Architect", 
-          category: "Amazon AWS",
-          instructor: "Stephane Maarek", 
-          duration: "65 hours",
-          description: "Prepare for AWS Solutions Architect certification",
-          price: 119.99, 
-          rating: 4.9,
-          enrollmentCount: 234000,
-          imageUrl: "https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 55,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 6002, 
-          title: "AWS Developer Associate", 
-          category: "Amazon AWS",
-          instructor: "Ryan Kroonenburg", 
-          duration: "45 hours",
-          description: "Become an AWS certified developer",
-          price: 109.99, 
-          rating: 4.8,
-          enrollmentCount: 89000,
-          imageUrl: "https://images.pexels.com/photos/577585/pexels-photo-577585.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 40,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 6003, 
-          title: "AWS Lambda & Serverless", 
-          category: "Amazon AWS",
-          instructor: "Jeremy Cook", 
-          duration: "28 hours",
-          description: "Build serverless applications with AWS Lambda",
-          price: 94.99, 
-          rating: 4.7,
-          enrollmentCount: 67000,
-          imageUrl: "https://images.pexels.com/photos/11035539/pexels-photo-11035539.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 24,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 6004, 
-          title: "DevOps on AWS", 
-          category: "Amazon AWS",
-          instructor: "Derek Morgan", 
-          duration: "35 hours",
-          description: "Master DevOps practices on AWS platform",
-          price: 99.99, 
-          rating: 4.8,
-          enrollmentCount: 54000,
-          imageUrl: "https://images.pexels.com/photos/1181243/pexels-photo-1181243.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 30,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 6005, 
-          title: "AWS Security Best Practices", 
-          category: "Amazon AWS",
-          instructor: "Zeal Vora", 
-          duration: "32 hours",
-          description: "Secure your AWS infrastructure",
-          price: 104.99, 
-          rating: 4.9,
-          enrollmentCount: 45000,
-          imageUrl: "https://images.pexels.com/photos/256417/pexels-photo-256417.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 28,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-      "Drawing": [
-        { 
-          id: 7001, 
-          title: "Complete Drawing Masterclass", 
-          category: "Drawing",
-          instructor: "Jaysen Batchelor", 
-          duration: "40 hours",
-          description: "Learn drawing fundamentals from scratch",
-          price: 84.99, 
-          rating: 4.7,
-          enrollmentCount: 123000,
-          imageUrl: "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 35,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 7002, 
-          title: "Character Design for Beginners", 
-          category: "Drawing",
-          instructor: "Scott Harris", 
-          duration: "28 hours",
-          description: "Create memorable character designs",
-          price: 79.99, 
-          rating: 4.8,
-          enrollmentCount: 67000,
-          imageUrl: "https://images.pexels.com/photos/1029757/pexels-photo-1029757.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 24,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 7003, 
-          title: "Digital Drawing in Procreate", 
-          category: "Drawing",
-          instructor: "Brad Colbow", 
-          duration: "32 hours",
-          description: "Master digital art on iPad with Procreate",
-          price: 89.99, 
-          rating: 4.9,
-          enrollmentCount: 89000,
-          imageUrl: "https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 28,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 7004, 
-          title: "Anatomy for Artists", 
-          category: "Drawing",
-          instructor: "Rey Bustos", 
-          duration: "36 hours",
-          description: "Master human anatomy for figure drawing",
-          price: 94.99, 
-          rating: 4.8,
-          enrollmentCount: 54000,
-          imageUrl: "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 32,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-        { 
-          id: 7005, 
-          title: "Watercolor Painting", 
-          category: "Drawing",
-          instructor: "Ana Victoria Calderon", 
-          duration: "25 hours",
-          description: "Learn watercolor techniques from basics to advanced",
-          price: 74.99, 
-          rating: 4.7,
-          enrollmentCount: 78000,
-          imageUrl: "https://images.pexels.com/photos/164745/pexels-photo-164745.jpeg?auto=compress&cs=tinysrgb&w=300&h=200&fit=crop",
-          modules: 22,
-          content: [],
-          projects: [],
-          progress: 0,
-          completed: false,
-          reviews: []
-        },
-      ],
-    };
-
-    return categoryCourses[category] || [];
+    return courses.filter(course => course.category === category);
   };
 
-  // Get all courses from all categories for search
-  const getAllCourses = (): Course[] => {
-    const allCategories = ['Python', 'Excel', 'Web Development', 'JavaScript', 'Data Science', 'Amazon AWS', 'Drawing'];
-    const allCourses: Course[] = [];
-    allCategories.forEach(cat => {
-      allCourses.push(...getCoursesByCategory(cat));
-    });
-    return allCourses;
-  };
-
-  // Search function
+  // Search function using the courses prop
   const handleSearch = (query: string, shouldScroll: boolean = false) => {
     setSearchQuery(query);
     if (query.trim() === "") {
       setIsSearching(false);
       setSearchResults([]);
     } else {
-      const allCourses = getAllCourses();
-      const results = allCourses.filter(course => 
+      const results = courses.filter(course => 
         course.title.toLowerCase().includes(query.toLowerCase()) ||
         course.instructor.toLowerCase().includes(query.toLowerCase()) ||
         course.description.toLowerCase().includes(query.toLowerCase()) ||
@@ -757,64 +104,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   }));
 
   return (
-    <div className="text-gray-800 font-sans bg-white">
+    <div className="text-gray-800 font-sans bg-white min-h-screen flex flex-col">
       {/* Header */}
-      <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b bg-white ${
-          scrolled ? "shadow-md" : "shadow-sm"
-        }`}
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16 py-3 flex items-center gap-4 lg:gap-8">
-          <Logo size="md" />
-          
-          <div className="flex-1 max-w-2xl relative hidden md:block">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <Icon name="search" className="w-4 h-4 text-gray-400" />
-            </div>
-            <input 
-              type="text" 
-              placeholder={t.searchAnything} 
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchQuery, true)}
-              className="w-full bg-gray-100 border border-transparent focus:bg-white focus:border-[#219BD5] rounded-full py-2.5 pl-10 pr-4 text-sm outline-none transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <Icon name="close" className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+      <PublicHeader 
+        user={null} 
+        onNavigateToSignIn={onNavigateToSignIn} 
+        onNavigateToSignUp={onNavigateToSignUp}
+        searchQuery={searchQuery}
+        onSearch={(query) => handleSearch(query)}
+        scrolledEffect={true}
+      />
 
-
-          <div className="flex items-center gap-2 ml-auto">
-            <button 
-              onClick={() => document.getElementById('courses')?.scrollIntoView({ behavior: 'smooth' })}
-              className="hidden sm:block px-3 py-2 text-sm font-medium text-gray-600 hover:text-[#219BD5]"
-            >
-              {t.courses}
-            </button>
-            <button
-              onClick={onNavigateToSignIn}
-              className="px-4 py-2 text-sm font-bold text-[#219BD5] border border-[#219BD5] hover:bg-[#219BD5]/10 transition-colors"
-            >
-              {t.login}
-            </button>
-            <button
-              onClick={onNavigateToSignUp}
-              className="px-4 py-2 bg-[#219BD5] text-white text-sm font-bold hover:bg-[#1a7fb0] transition-all"
-            >
-              {t.signup}
-            </button>
-            <LanguageSwitcher showLabel={false} />
-          </div>
-        </div>
-      </header>
-
-      <main className="pt-[65px]">
+      <main className="pt-[65px] flex-1">
         {/* Hero Section - Wide Background, Boxed Content */}
         <section className="relative h-[450px] lg:h-[500px] overflow-hidden">
           <img 
@@ -855,7 +156,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Trust Section */}
         <section className="py-12 bg-gray-50 border-b border-gray-200">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
             <p className="text-center text-gray-600 mb-8 text-lg">{t.trustedBy}</p>
             <div className="flex flex-wrap justify-center items-center gap-8 lg:gap-16 opacity-60">
               {['Volkswagen', 'Samsung', 'Cisco', 'AT&T', 'Procter & Gamble', 'Hewlett Packard'].map(partner => (
@@ -867,7 +168,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Broad Selection Section with Interactive Tabs */}
         <section id="courses" className="py-16 bg-white">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-3xl font-bold text-gray-900">
                 {isSearching ? `${t.searchResultsFor} "${searchQuery}"` : t.broadSelection}
@@ -947,7 +248,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       : t.catDrawDesc}
                   </p>
                   <button 
-                    onClick={() => setActiveCategory(activeCategory)}
+                    onClick={() => router.push(`/courses?category=${encodeURIComponent(activeCategory)}`)}
                     className="px-4 py-2 border border-[#219BD5] text-[#219BD5] font-bold text-sm hover:bg-[#219BD5] hover:text-white transition-colors"
                   >
                     {t.explore} {activeCategory === "Web Development" ? t.categoryDevelopment : activeCategory === "Drawing" ? t.categoryDesign : activeCategory}
@@ -969,7 +270,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <CourseCard 
                       key={course.id} 
                       course={course} 
-                      onCourseSelect={() => onNavigateToSignIn()} 
+                      onCourseSelect={(course) => router.push(`/courses/${course.id}`)} 
                     />
                   ))}
                 </div>
@@ -994,7 +295,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Top Categories */}
         <section className="py-16 bg-white">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
             <h2 className="text-2xl font-bold text-gray-900 mb-8">{t.topCategories}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
@@ -1049,7 +350,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* CTA Section - Instructor Theme */}
         <section className="py-20 bg-white">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
             <div className="flex flex-col lg:flex-row items-center gap-16">
               <div className="lg:w-1/2">
                 <img src="https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=600&h=450&fit=crop" alt="Instructor teaching" className="w-full rounded-sm shadow-lg" referrerPolicy="no-referrer" />
@@ -1070,67 +371,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </main>
 
       {/* Footer */}
-      <footer id="about" className="bg-white border-t border-gray-100 pt-20 pb-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-16">
-          <div className="grid md:grid-cols-4 gap-12 mb-16">
-            <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-6">
-                <Logo size="lg" />
-              </div>
-              <p className="text-gray-500 max-w-sm mb-8">
-                {t.footerTagline}
-              </p>
-              <div className="flex gap-4">
-                <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="Facebook">
-                  <Icon name="facebook" className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="Instagram">
-                  <Icon name="instagram" className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="X (Twitter)">
-                  <Icon name="xLogo" className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="TikTok">
-                  <Icon name="tiktok" className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 bg-gray-50 rounded-full text-gray-400 hover:text-[#219BD5] transition-colors" aria-label="LinkedIn">
-                  <Icon name="linkedin" className="w-5 h-5" />
-                </a>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-bold text-gray-900 mb-6">{t.quickLinks}</h4>
-              <ul className="space-y-4 text-gray-500">
-                <li><a href="#" className="hover:text-[#219BD5] transition-colors">{t.home}</a></li>
-                <li><a href="#courses" className="hover:text-[#219BD5] transition-colors">{t.courses}</a></li>
-                <li><a href="#features" className="hover:text-[#219BD5] transition-colors">{t.features}</a></li>
-                <li><a href="#about" className="hover:text-[#219BD5] transition-colors">{t.aboutUsTitle}</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-gray-900 mb-6">{t.contact}</h4>
-              <ul className="space-y-4 text-gray-500">
-                <li>info@cortouchmedia.com.ng</li>
-                <li>+2348067473244</li>
-                <li>6th Floor Lister Building<br />Ring Road Ibadan, Oyo State.</li>
-              </ul>
-            </div>
-          </div>
-          <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-6 mb-4 md:mb-0">
-              <Logo size="sm" />
-              <p>&copy; {new Date().getFullYear()} Cortouch Media, Inc.</p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.privacyPolicy}</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.termsOfService}</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.cookieSettings}</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.sitemap}</a>
-              <a href="#" className="hover:text-[#219BD5] transition-colors">{t.accessibilityStatement}</a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 };
