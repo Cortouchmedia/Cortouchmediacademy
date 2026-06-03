@@ -1,0 +1,311 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var AiAssistantService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AiAssistantService = void 0;
+const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
+const supabase_service_1 = require("../../supabase.service");
+let AiAssistantService = AiAssistantService_1 = class AiAssistantService {
+    constructor(configService, supabaseService) {
+        this.configService = configService;
+        this.supabaseService = supabaseService;
+        this.logger = new common_1.Logger(AiAssistantService_1.name);
+        this.baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    }
+    async onModuleInit() {
+        this.apiKey = this.configService.get("GEMINI_API_KEY");
+        if (!this.apiKey) {
+            this.logger.error("GEMINI_API_KEY not found in environment variables");
+            throw new Error("GEMINI_API_KEY is required");
+        }
+        this.logger.log("AI Assistant initialized");
+    }
+    async askQuestion(askQuestionDto) {
+        const { question, course_id, user_id } = askQuestionDto;
+        this.logger.log(`User ${user_id} asking: ${question}`);
+        try {
+            const courseContent = await this.getCourseContent(course_id);
+            const userProgress = await this.getUserProgress(user_id, course_id);
+            const prompt = `
+        You are a helpful tutor. Answer the student's question based on the course content.
+        
+        Course Content:
+        ${courseContent}
+        
+        Student Progress: ${userProgress}
+        
+        Student Question: ${question}
+        
+        Provide a clear, helpful, and concise answer.
+      `;
+            const response = await this.callGeminiAPI(prompt);
+            return {
+                success: true,
+                question,
+                answer: response,
+                timestamp: new Date(),
+            };
+        }
+        catch (error) {
+            this.logger.error(`Gemini API error: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get response: ${error.message}`);
+        }
+    }
+    async generateQuiz(generateQuizDto) {
+        const { course_id, topic, num_questions = 5 } = generateQuizDto;
+        try {
+            const courseContent = await this.getCourseContent(course_id);
+            const prompt = `
+        Generate ${num_questions} multiple-choice questions about "${topic || "this course"}".
+        
+        Course Content:
+        ${courseContent}
+        
+        Return ONLY valid JSON in this exact format (no other text):
+        {
+          "questions": [
+            {
+              "question": "question text here",
+              "options": ["A) option 1", "B) option 2", "C) option 3", "D) option 4"],
+              "correct_answer": "A",
+              "explanation": "why this is correct"
+            }
+          ]
+        }
+      `;
+            const response = await this.callGeminiAPI(prompt);
+            let quizData;
+            try {
+                const jsonMatch = response.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    quizData = JSON.parse(jsonMatch[0]);
+                }
+                else {
+                    quizData = JSON.parse(response);
+                }
+            }
+            catch {
+                quizData = { questions: [] };
+            }
+            return {
+                success: true,
+                quiz: quizData,
+                total_questions: num_questions,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Quiz generation error: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to generate quiz: ${error.message}`);
+        }
+    }
+    async explainConcept(explainConceptDto) {
+        const { concept, course_id, level = "intermediate" } = explainConceptDto;
+        try {
+            const courseContent = await this.getCourseContent(course_id);
+            const prompt = `
+        Explain the concept "${concept}" at a ${level} level.
+        
+        Course Context:
+        ${courseContent}
+        
+        Provide a response with:
+        1. A simple definition (1 sentence)
+        2. Key points to understand (3-5 bullet points)
+        3. A practical example
+        4. Common misconceptions to avoid
+      `;
+            const response = await this.callGeminiAPI(prompt);
+            return {
+                success: true,
+                concept,
+                explanation: response,
+                level,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Concept explanation error: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to explain concept: ${error.message}`);
+        }
+    }
+    async generateSummary(generateSummaryDto) {
+        const { course_id } = generateSummaryDto;
+        try {
+            const courseContent = await this.getCourseContent(course_id);
+            const prompt = `
+        Create a comprehensive summary of this course:
+        
+        ${courseContent}
+        
+        Provide:
+        1. A brief overview (2-3 sentences)
+        2. Key takeaways (bullet points)
+        3. Important concepts covered
+        4. Recommended next steps for students
+      `;
+            const response = await this.callGeminiAPI(prompt);
+            return {
+                success: true,
+                summary: response,
+                generated_at: new Date(),
+            };
+        }
+        catch (error) {
+            this.logger.error(`Summary generation error: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to generate summary: ${error.message}`);
+        }
+    }
+    async suggestResources(suggestResourcesDto) {
+        const { course_id, topic, limit = 5 } = suggestResourcesDto;
+        try {
+            const courseContent = await this.getCourseContent(course_id);
+            const prompt = `
+        Suggest ${limit} learning resources for "${topic}" based on this course:
+        
+        Course Content:
+        ${courseContent}
+        
+        Return ONLY valid JSON array in this format (no other text):
+        [
+          {
+            "title": "Resource title",
+            "type": "video|article|documentation|exercise|project",
+            "description": "Brief description",
+            "why_helpful": "Why this resource is useful",
+            "estimated_time": "1 hour"
+          }
+        ]
+      `;
+            const response = await this.callGeminiAPI(prompt);
+            let resources;
+            try {
+                const jsonMatch = response.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    resources = JSON.parse(jsonMatch[0]);
+                }
+                else {
+                    resources = JSON.parse(response);
+                }
+            }
+            catch {
+                resources = [];
+            }
+            return {
+                success: true,
+                topic,
+                resources: resources.slice(0, limit),
+            };
+        }
+        catch (error) {
+            this.logger.error(`Resource suggestion error: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to suggest resources: ${error.message}`);
+        }
+    }
+    async callGeminiAPI(prompt) {
+        const modelNames = [
+            "models/gemini-2.5-flash",
+            "models/gemini-flash-latest",
+            "models/gemini-2.0-flash",
+            "models/gemini-2.5-pro",
+        ];
+        let lastError = null;
+        for (const modelName of modelNames) {
+            try {
+                this.logger.log(`Trying model: ${modelName}`);
+                const url = `${this.baseUrl}/${modelName}:generateContent?key=${this.apiKey}`;
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [
+                                    {
+                                        text: prompt,
+                                    },
+                                ],
+                            },
+                        ],
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 2048,
+                        },
+                    }),
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    this.logger.warn(`Model ${modelName} failed: ${response.status} - ${errorText}`);
+                    lastError = new Error(`HTTP ${response.status}: ${errorText}`);
+                    continue;
+                }
+                const data = await response.json();
+                const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (generatedText) {
+                    this.logger.log(`Successfully used model: ${modelName}`);
+                    return generatedText;
+                }
+                lastError = new Error("No text generated from model");
+            }
+            catch (error) {
+                this.logger.warn(`Error with model ${modelName}: ${error.message}`);
+                lastError = error;
+            }
+        }
+        throw lastError || new Error("No working Gemini model found");
+    }
+    async getCourseContent(courseId) {
+        const supabase = this.supabaseService.getClient();
+        const { data: course } = await supabase
+            .from("courses")
+            .select("title, description")
+            .eq("id", courseId)
+            .single();
+        const { data: modules } = await supabase
+            .from("course_modules")
+            .select(`
+        title,
+        lessons:course_lessons(title, description, text_content)
+      `)
+            .eq("course_id", courseId);
+        let content = `Course: ${course?.title || "Unknown"}\n`;
+        content += `Description: ${course?.description || ""}\n\n`;
+        for (const module of modules || []) {
+            content += `\nModule: ${module.title}\n`;
+            for (const lesson of module.lessons || []) {
+                content += `  Lesson: ${lesson.title}\n`;
+                content += `  ${lesson.text_content?.substring(0, 300) || ""}\n`;
+            }
+        }
+        return content.substring(0, 8000);
+    }
+    async getUserProgress(userId, courseId) {
+        const supabase = this.supabaseService.getClient();
+        const { data: progress } = await supabase
+            .from("course_enrollments")
+            .select("progress_percentage")
+            .eq("user_id", userId)
+            .eq("course_id", courseId)
+            .maybeSingle();
+        if (progress) {
+            return `${progress.progress_percentage}% complete`;
+        }
+        return "Not enrolled";
+    }
+};
+exports.AiAssistantService = AiAssistantService;
+exports.AiAssistantService = AiAssistantService = AiAssistantService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [config_1.ConfigService,
+        supabase_service_1.SupabaseService])
+], AiAssistantService);
+//# sourceMappingURL=ai-assistant.service.js.map
