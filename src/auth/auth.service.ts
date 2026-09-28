@@ -198,19 +198,23 @@ export class AuthService {
         return null;
       }
 
-      // Fix: Use 'id' instead of 'user_id' to match your schema
       const { data, error } = await supabaseAdmin
-        .from("profiles")
-        .insert({
-          id: userId, // Changed from user_id to id
-          email: email,
-          full_name: full_name,
-          role: role,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+  .from("profiles")
+  .upsert(
+    {
+      id: userId,
+      email: email,
+      full_name: full_name,
+      role: role,
+      updated_at: new Date().toISOString(),
+    },
+    {
+      onConflict: "id",
+      ignoreDuplicates: false,
+    },
+  )
+  .select()
+  .single();
 
       if (error) {
         this.logger.error(
