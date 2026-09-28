@@ -2,10 +2,14 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start:dev": "nest start --watch"
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +25,6 @@
     "@nestjs/mapped-types": "^2.1.1",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.17",
-    "@prisma/client": "^7.6.0",
     "@supabase/supabase-js": "^2.105.4",
     "axios": "^1.16.1",
     "class-transformer": "^0.5.1",
@@ -40,7 +43,6 @@
     "@types/express": "^5.0.6",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/multer": "^2.1.0",
-    "@types/node": "^25.5.2",
-    "prisma": "^7.7.0"
+    "@types/node": "^25.5.2"
   }
 }
