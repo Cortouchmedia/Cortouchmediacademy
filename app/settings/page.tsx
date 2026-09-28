@@ -5,9 +5,9 @@ import { useAppContext } from '../../context/AppContext';
 import { Settings } from '../../components/Settings';
 
 export default function SettingsPage() {
-  const { currentUser, handleUserUpdate } = useAppContext();
+  const { currentUser } = useAppContext();
 
   if (!currentUser) return null;
 
-  return <Settings user={currentUser} onUserUpdate={handleUserUpdate} />;
+  return <Settings user={currentUser} />;
 }

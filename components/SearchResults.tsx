@@ -4,14 +4,23 @@ import React from 'react';
 import type { Course, CourseWithEnrollment } from '../types';
 import { CourseCard } from './CourseCard';
 import { Icon } from './Icon';
+import { useAppContext } from '../context/AppContext';
+import { useRouter } from 'next/navigation';
 
 interface SearchResultsProps {
     courses: CourseWithEnrollment[];
     searchQuery: string;
-    onCourseSelect: (course: Course) => void;
 }
 
-export const SearchResults: React.FC<SearchResultsProps> = ({ courses, searchQuery, onCourseSelect }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({ courses, searchQuery }) => {
+  const { handleCourseSelect } = useAppContext();
+  const router = useRouter();
+
+  const onCourseSelect = (course: Course) => {
+    handleCourseSelect(course);
+    router.push(`/course/${course.id}`);
+  };
+
   return (
     <div className="space-y-8">
       <div>

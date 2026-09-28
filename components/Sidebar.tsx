@@ -6,12 +6,11 @@ import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { useAppContext } from '../context/AppContext';
 import { translations } from '../constants/translations';
+import { useRouter } from 'next/navigation';
 
 interface SidebarProps {
   user: User;
   activePage: Page;
-  onNavigate: (page: Page) => void;
-  onLogout: () => void;
 }
 
 const NavLink: React.FC<{
@@ -33,9 +32,22 @@ const NavLink: React.FC<{
   </button>
 );
 
-export const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onLogout }) => {
-  const { language } = useAppContext();
+export const Sidebar: React.FC<SidebarProps> = ({ user, activePage }) => {
+  const { language, handleNavigate, handleLogout } = useAppContext();
   const t = translations[language];
+  const router = useRouter();
+
+  const onNavigate = (page: Page) => {
+    handleNavigate(page);
+    let path = page.toLowerCase().replace(/\s+/g, '-');
+    if (path === 'dashboard') path = 'student-dashboard';
+    router.push(`/${path}`);
+  };
+
+  const onLogout = () => {
+    handleLogout();
+    router.push('/');
+  };
 
   const studentNavItems: { label: Page; icon: string; translation: string }[] = [
     { label: 'Dashboard', icon: 'dashboard', translation: t.dashboard },

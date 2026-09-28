@@ -386,7 +386,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   }, [activeCategory, searchQuery, priceRange, sortBy]);
 
   // If showing course details, render the CourseDetails component
-  // Pass user even if null - CourseDetails will handle showing landing page
   if (showCourseDetails && selectedCourse) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -396,11 +395,11 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
           onNavigateToSignUp={onNavigateToSignUp}
         />
         <main className="flex-1 pt-[73px] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <CourseDetails
-  user={user}
-  course={selectedCourse}
-  allCourses={allCourses}
-/>
+          <CourseDetails
+            user={user}
+            course={selectedCourse}
+            allCourses={allCourses}
+          />
         </main>
         <Footer />
       </div>
@@ -409,7 +408,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
 
   return (
     <div className="text-gray-800 font-sans bg-white min-h-screen flex flex-col">
-      {/* Header */}
       <PublicHeader
         user={user}
         onNavigateToSignIn={onNavigateToSignIn}
@@ -420,7 +418,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
 
       <main className="pt-[73px] flex-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Header with stats */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
@@ -435,7 +432,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
               </p>
             </div>
 
-            {/* Sort and filter controls */}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -458,7 +454,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
             </div>
           </div>
 
-          {/* Filters Panel */}
           {showFilters && (
             <div className="bg-gray-50 rounded-xl p-6 mb-8 border border-gray-200">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -503,7 +498,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
             </div>
           )}
 
-          {/* Category Tabs */}
           {!isSearching && (
             <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-hide border-b border-gray-200">
               {categories.map((cat) => (
@@ -522,7 +516,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
             </div>
           )}
 
-          {/* Search Clear Button */}
           {isSearching && (
             <div className="mb-6">
               <button
@@ -535,7 +528,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
             </div>
           )}
 
-          {/* Course Grid */}
           {paginatedCourses.length > 0 ? (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -549,7 +541,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                 ))}
               </div>
 
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex justify-center items-center gap-2 mt-12">
                   <button
@@ -619,7 +610,6 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
         </div>
       </main>
 
-      {/* Footer */}
       <Footer />
     </div>
   );

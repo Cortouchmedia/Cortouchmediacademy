@@ -3,11 +3,8 @@
 import React, { useState } from 'react';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
-
-interface SignInPageProps {
-  onSignIn: (role?: 'admin' | 'student' | 'instructor') => void;
-  onNavigateToSignUp: () => void;
-}
+import { useAppContext } from '../context/AppContext';
+import { useRouter } from 'next/navigation';
 
 const FormInput: React.FC<{ label: string; type: string; id: string; placeholder: string }> = ({ label, type, id, placeholder }) => (
     <div>
@@ -21,9 +18,22 @@ const FormInput: React.FC<{ label: string; type: string; id: string; placeholder
     </div>
 );
 
-export const SignInPage: React.FC<SignInPageProps> = ({ onSignIn, onNavigateToSignUp }) => {
+export const SignInPage: React.FC = () => {
+  const { handleLogin } = useAppContext();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [role, setRole] = useState<'student' | 'instructor'>('student');
+
+  const onSignIn = (selectedRole?: 'admin' | 'student' | 'instructor') => {
+    handleLogin(selectedRole);
+    if (selectedRole === 'instructor') router.push('/instructor-dashboard');
+    else if (selectedRole === 'admin') router.push('/admin');
+    else router.push('/student-dashboard');
+  };
+
+  const onNavigateToSignUp = () => {
+    router.push('/signup');
+  };
 
   return (
     <div className="min-h-screen bg-brand-bg flex items-center justify-center p-4">

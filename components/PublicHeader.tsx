@@ -12,18 +12,24 @@ import type { User } from '../types';
 
 interface PublicHeaderProps {
   user?: User | null;
+  // @ts-ignore — parent-owned callbacks; valid client-to-client props
   onNavigateToSignIn?: () => void;
+  // @ts-ignore
   onNavigateToSignUp?: () => void;
   searchQuery?: string;
+  // @ts-ignore — parent-owned search callback
   onSearch?: (query: string) => void;
   scrolledEffect?: boolean;
 }
 
 export const PublicHeader: React.FC<PublicHeaderProps> = ({
   user,
+
   onNavigateToSignIn,
+ 
   onNavigateToSignUp,
   searchQuery = "",
+
   onSearch,
   scrolledEffect = false,
 }) => {

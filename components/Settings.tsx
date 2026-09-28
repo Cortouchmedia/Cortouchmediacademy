@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
+import { useAppContext } from '../context/AppContext';
 
 type SettingsTab = 'Profile' | 'Security' | 'Notifications';
 
 interface SettingsProps {
     user: User;
-    onUserUpdate: (user: User) => void;
 }
 
 const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => void }> = ({ label, isActive, onClick }) => (
@@ -54,7 +54,8 @@ const Toggle: React.FC<{ label: string; description: string; enabled: boolean }>
     );
 };
 
-export const Settings: React.FC<SettingsProps> = ({ user, onUserUpdate }) => {
+export const Settings: React.FC<SettingsProps> = ({ user }) => {
+    const { handleUserUpdate: onUserUpdate } = useAppContext();
     const [activeTab, setActiveTab] = useState<SettingsTab>('Profile');
     const [formData, setFormData] = useState<User>(user);
     const [isSaved, setIsSaved] = useState(false);

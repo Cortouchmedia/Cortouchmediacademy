@@ -26,7 +26,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Sync currentPage with pathname
   React.useEffect(() => {
     if (isLoggedIn && currentUser) {
       const path = pathname.split('/')[1];
@@ -43,26 +42,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       else if (path === 'profile') handleNavigate('Profile');
       else if (path === 'about') handleNavigate('About Us');
       else if (path === 'admin') handleNavigate('Admin');
-      else if (path === 'course') {
-        // We don't call handleNavigate here to avoid resetting selectedCourse if it's already set
-        // But we might want to ensure the state reflects we are in a course
-      }
-      else if (path === 'search') {
-        // Similar for search
-      }
     }
   }, [pathname, isLoggedIn, currentUser, handleNavigate]);
 
-  // Handle redirects based on role when on root path
   React.useEffect(() => {
     if (isLoggedIn && currentUser && pathname === '/') {
-      if (currentUser.role === 'admin') {
-        router.push('/admin');
-      } else if (currentUser.role === 'instructor') {
-        router.push('/instructor-dashboard');
-      } else {
-        router.push('/student-dashboard');
-      }
+      if (currentUser.role === 'admin') router.push('/admin');
+      else if (currentUser.role === 'instructor') router.push('/instructor-dashboard');
+      else router.push('/student-dashboard');
     }
   }, [isLoggedIn, currentUser, pathname, router]);
 
@@ -85,39 +72,37 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!isLoggedIn || !currentUser) {
     if (pathname === '/admin/login') {
-      return <AdminSignInPage onSignIn={(role) => {
-        handleLogin(role);
-        router.push('/admin');
-      }} />;
+      return (
+        <AdminSignInPage
+          onSignIn={(role) => {
+            handleLogin(role);
+            router.push('/admin');
+          }}
+        />
+      );
     }
 
     if (pathname === '/login') {
-      return <SignInPage onSignIn={(role) => {
-        handleLogin(role);
-        if (role === 'instructor') router.push('/instructor-dashboard');
-        else if (role === 'admin') router.push('/admin');
-        else router.push('/student-dashboard');
-      }} onNavigateToSignUp={handleNavigateToSignUp} />;
+      return <SignInPage />;
     }
 
     if (pathname === '/signup' || authView === 'signUp') {
-      return <SignUpPage onSignUp={(role) => {
-        handleLogin(role);
-        if (role === 'instructor') router.push('/instructor-dashboard');
-        else if (role === 'admin') router.push('/admin');
-        else router.push('/student-dashboard');
-      }} onNavigateToSignIn={handleNavigateToSignIn} />;
+      return <SignUpPage />;
     }
-    
+
     if (pathname.startsWith('/courses')) {
       return children;
     }
 
-    // Default landing page for other routes when not logged in
-    return <LandingPage onNavigateToSignIn={handleNavigateToSignIn} onNavigateToSignUp={handleNavigateToSignUp} courses={courses} />;
+    return (
+      <LandingPage
+        onNavigateToSignIn={handleNavigateToSignIn}
+        onNavigateToSignUp={handleNavigateToSignUp}
+        courses={courses}
+      />
+    );
   }
 
-  // Prevent rendering root content if we're about to redirect
   if (pathname === '/') {
     return null;
   }
@@ -126,9 +111,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <ErrorBoundary>
       <div className="min-h-screen font-sans bg-brand-bg">
         <div className="flex min-h-screen relative">
-          {/* Mobile Overlay */}
           {isSidebarOpen && (
-            <div 
+            <div
               className="fixed inset-0 bg-black/50 z-40 lg:hidden"
               onClick={() => setIsSidebarOpen(false)}
             />
@@ -139,24 +123,22 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <AdminSidebar user={currentUser} onLogout={handleLogout} />
             ) : (
               <Sidebar 
-                user={currentUser} 
-                activePage={currentPage} 
-                onNavigate={(page) => {
-                  handleNavigate(page);
-                  let path = page.toLowerCase().replace(/\s+/g, '-');
-                  if (path === 'dashboard') path = 'student-dashboard';
-                  router.push(`/${path}`);
-                  setIsSidebarOpen(false);
-                }} 
-                onLogout={handleLogout}
-              />
+              user={currentUser} 
+              activePage={currentPage} 
+            />
             )}
           </div>
 
           <main className="flex-1 flex flex-col min-w-0">
             <Header
               user={currentUser}
-              currentPage={isAdminRoute ? 'Admin Portal' : searchQuery ? 'Search Results' : editingCourse ? 'Edit Course' : selectedCourse ? 'Course Details' : currentPage}
+              currentPage={
+                isAdminRoute ? 'Admin Portal' :
+                searchQuery ? 'Search Results' :
+                editingCourse ? 'Edit Course' :
+                selectedCourse ? 'Course Details' :
+                currentPage
+              }
               searchQuery={searchQuery}
               onSearchChange={(query) => {
                 handleSearchChange(query);
@@ -173,16 +155,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <Footer />
           </main>
+
           {!isAdminRoute && (
             <ChatWidget
               isOpen={isChatOpen}
               onToggle={() => setIsChatOpen(!isChatOpen)}
               messages={messages}
-              onSendMessage={(text) => {}} // This will be handled by context
+              onSendMessage={(text) => {}}
               isBotTyping={isBotTyping}
             />
           )}
-          {completedCourse && <CompletionModal course={completedCourse} onClose={() => setCompletedCourse(null)} onNavigate={handleNavigate} />}
+
+          {completedCourse && (
+            <CompletionModal
+              course={completedCourse}
+              onClose={() => setCompletedCourse(null)}
+              onNavigate={handleNavigate}
+            />
+          )}
         </div>
       </div>
     </ErrorBoundary>
