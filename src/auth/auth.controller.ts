@@ -11,7 +11,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { SupabaseService } from "../../supabase.service"; // Fixed path
+import { SupabaseService } from "../supabase/supabase.service"; // Fixed path
 import { RegisterDto } from "./dto/register.dto";
 
 @Controller("api/auth")

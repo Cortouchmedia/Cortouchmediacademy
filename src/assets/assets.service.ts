@@ -5,7 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from "@nestjs/common";
-import { SupabaseService } from "../../supabase.service";
+import { SupabaseService } from "../supabase/supabase.service";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
 import { UploadImageDto, UpdateAssetDto } from "./dto/asset.dto";
 import { v4 as uuidv4 } from "uuid";

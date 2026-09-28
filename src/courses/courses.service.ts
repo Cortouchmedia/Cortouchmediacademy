@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from "@nestjs/common";
-import { SupabaseService } from "../../supabase.service";
+import { SupabaseService } from "../supabase/supabase.service";
 
 @Injectable()
 export class CoursesService {

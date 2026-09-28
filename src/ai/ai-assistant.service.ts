@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { SupabaseService } from "../../supabase.service";
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class AiAssistantService implements OnModuleInit {

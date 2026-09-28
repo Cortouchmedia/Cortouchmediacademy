@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { SupabaseService } from "../../supabase.service";
+import { SupabaseService } from "../supabase/supabase.service";
 import { PaystackService } from "./paystack.service";
 import {
   InitializePaymentDto,

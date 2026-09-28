@@ -5,7 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from "@nestjs/common";
-import { SupabaseService } from "../../supabase.service";
+import { SupabaseService } from "../supabase/supabase.service";
 import { CreateTopicDto, UpdateTopicDto } from "./dto/topic.dto";
 import { CreateReplyDto, UpdateReplyDto } from "./dto/reply.dto";
 
