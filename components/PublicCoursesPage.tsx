@@ -396,16 +396,11 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
           onNavigateToSignUp={onNavigateToSignUp}
         />
         <main className="flex-1 pt-[73px] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-          <CourseDetails
-            user={user}
-            course={selectedCourse}
-            allCourses={allCourses}
-            onBack={handleBackToCourses}
-            onProjectSubmit={onProjectSubmit || (() => {})}
-            onToggleLessonComplete={onToggleLessonComplete || (() => {})}
-            onEnrollmentSuccess={handleEnrollmentSuccessLocal}
-            onSendCourseMessage={onSendCourseMessage || (() => {})}
-          />
+        <CourseDetails
+  user={user}
+  course={selectedCourse}
+  allCourses={allCourses}
+/>
         </main>
         <Footer />
       </div>

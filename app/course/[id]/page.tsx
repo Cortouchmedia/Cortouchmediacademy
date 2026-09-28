@@ -8,10 +8,7 @@ import { CourseDetails } from '../../../components/CourseDetails';
 export default function CourseDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { 
-    currentUser, coursesWithEnrollmentStatus, handleProjectSubmit, 
-    handleToggleLessonComplete, handleEnrollmentSuccess, handleSendCourseMessage 
-  } = useAppContext();
+  const { currentUser, coursesWithEnrollmentStatus } = useAppContext();
 
   if (!currentUser) return null;
 
@@ -40,11 +37,6 @@ export default function CourseDetailsPage() {
       user={currentUser}
       course={course} 
       allCourses={coursesWithEnrollmentStatus}
-      onBack={() => router.back()} 
-      onProjectSubmit={handleProjectSubmit}
-      onToggleLessonComplete={handleToggleLessonComplete}
-      onEnrollmentSuccess={handleEnrollmentSuccess}
-      onSendCourseMessage={handleSendCourseMessage}
     />
   );
 }

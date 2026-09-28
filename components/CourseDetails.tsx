@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -8,16 +7,13 @@ import { ProgressBar } from './ProgressBar';
 import { PaystackButton } from './PaystackButton';
 import { InstructorAssistant } from './InstructorAssistant';
 import { CourseLandingPage } from './CourseLandingPage';
+import { useAppContext } from '../context/AppContext';
+import { useRouter } from 'next/navigation';
 
 interface CourseDetailsProps {
     user: User | null;
     course: CourseWithEnrollment;
     allCourses: CourseWithEnrollment[];
-    onBack: () => void;
-    onProjectSubmit: (courseId: number, projectId: number, submissionLink: string) => void;
-    onToggleLessonComplete: (courseId: number, lessonId: number) => void;
-    onEnrollmentSuccess: (courseId: number) => void;
-    onSendCourseMessage: (courseId: number, text: string) => void;
 }
 
 type CourseTab = 'Curriculum' | 'Projects' | 'AI Assistant' | 'Webinars' | 'Reviews';
@@ -34,11 +30,21 @@ const TabButton: React.FC<{ label: string; isActive: boolean; onClick: () => voi
     </button>
 );
 
-export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allCourses, onBack, onProjectSubmit, onToggleLessonComplete, onEnrollmentSuccess, onSendCourseMessage }) => {
+export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allCourses }) => {
+    const {
+        handleProjectSubmit: onProjectSubmit,
+        handleToggleLessonComplete: onToggleLessonComplete,
+        handleEnrollmentSuccess: onEnrollmentSuccess,
+        handleSendCourseMessage: onSendCourseMessage,
+    } = useAppContext();
+    const router = useRouter();
+
+    const onBack = () => router.back();
+
     const [activeTab, setActiveTab] = useState<CourseTab>('Curriculum');
     const [activeLesson, setActiveLesson] = useState<any>(null);
     const [submissionLinks, setSubmissionLinks] = useState<Record<number, string>>({});
-    
+
     const handleEnroll = () => {
         onEnrollmentSuccess(course.id);
     };
@@ -63,18 +69,18 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
 
     if (!course.isEnrolled) {
         return (
-            <CourseLandingPage 
-                user={user} 
-                course={course} 
-                onBack={onBack} 
-                onEnrollmentSuccess={onEnrollmentSuccess} 
+            <CourseLandingPage
+                user={user}
+                course={course}
+                onBack={onBack}
+                onEnrollmentSuccess={onEnrollmentSuccess}
             />
         );
     }
 
     return (
         <div className="space-y-8">
-            {/* Header section */}
+
             <div className="relative rounded-lg overflow-hidden p-8 flex items-end min-h-[300px] bg-cover bg-center text-white" style={{ backgroundImage: `url(${course.imageUrl})` }}>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
                 <div className="relative z-10 w-full">
@@ -128,10 +134,10 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                         <div className="space-y-6">
                             {activeLesson && activeLesson.type === 'video' && (
                                 <div className="bg-black rounded-xl overflow-hidden aspect-video shadow-2xl">
-                                    <video 
+                                    <video
                                         key={activeLesson.id}
-                                        src={activeLesson.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4"} 
-                                        controls 
+                                        src={activeLesson.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4"}
+                                        controls
                                         className="w-full h-full"
                                         onEnded={() => handleVideoEnd(activeLesson.id)}
                                         autoPlay
@@ -149,8 +155,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                         <h3 className="font-bold text-lg text-gray-800">{module.title}</h3>
                                         <ul className="mt-2 space-y-1">
                                             {module.lessons.map(lesson => (
-                                                <li 
-                                                    key={lesson.id} 
+                                                <li
+                                                    key={lesson.id}
                                                     className={`flex items-center justify-between gap-2 p-2 rounded-md transition-colors cursor-pointer ${activeLesson?.id === lesson.id ? 'bg-brand-secondary/10 border-l-4 border-brand-secondary' : 'hover:bg-gray-50'}`}
                                                     onClick={() => handleLessonSelect(lesson)}
                                                 >
@@ -160,7 +166,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                                     </div>
                                                     <div className="flex items-center gap-3 text-sm">
                                                         <span className="text-gray-500">{lesson.duration}</span>
-                                                        <div 
+                                                        <div
                                                             className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors cursor-pointer ${lesson.isCompleted ? 'bg-brand-accent border-brand-accent' : 'border-gray-300 hover:border-brand-accent'}`}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -179,7 +185,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                             </div>
                         </div>
                     )}
-                    
+
                     {/* Projects View */}
                     {activeTab === 'Projects' && (
                         <div className="space-y-4">
@@ -209,9 +215,9 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                     <div className="space-y-3">
                                         <div>
                                             <label htmlFor={`link-${project.id}`} className="block text-xs font-semibold text-brand-muted uppercase tracking-wider mb-1">Submission Link (GitHub, Drive, etc.)</label>
-                                            <input 
+                                            <input
                                                 id={`link-${project.id}`}
-                                                type="url" 
+                                                type="url"
                                                 placeholder="https://github.com/your-repo"
                                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-secondary focus:border-transparent outline-none transition-all"
                                                 value={submissionLinks[project.id] || ''}
@@ -219,8 +225,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                                 disabled={project.isGrading}
                                             />
                                         </div>
-                                        <button 
-                                            onClick={() => onProjectSubmit(course.id, project.id, submissionLinks[project.id] || '')} 
+                                        <button
+                                            onClick={() => onProjectSubmit(course.id, project.id, submissionLinks[project.id] || '')}
                                             disabled={project.isGrading || !course.isEnrolled || !submissionLinks[project.id]}
                                             className="w-full sm:w-auto px-6 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-opacity-80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                         >
@@ -250,25 +256,25 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                     <span className="text-gray-500">({course.reviews?.length || 0} reviews)</span>
                                 </div>
                             </div>
-                            
+
                             <div className="grid gap-6">
                                 {course.reviews && course.reviews.length > 0 ? (
                                     course.reviews.map(review => (
                                         <div key={review.id} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
                                             <div className="flex items-center gap-4 mb-4">
-                                                <img 
-                                                    src={review.avatarUrl || `https://picsum.photos/seed/${review.author}/40/40`} 
-                                                    alt={review.author} 
+                                                <img
+                                                    src={review.avatarUrl || `https://picsum.photos/seed/${review.author}/40/40`}
+                                                    alt={review.author}
                                                     className="w-12 h-12 rounded-full object-cover"
                                                 />
                                                 <div>
                                                     <h4 className="font-bold text-gray-900">{review.author}</h4>
                                                     <div className="flex items-center gap-1">
                                                         {[...Array(5)].map((_, i) => (
-                                                            <Icon 
-                                                                key={i} 
-                                                                name="star" 
-                                                                className={`w-3 h-3 ${i < review.rating ? 'text-yellow-500 fill-current' : 'text-gray-300'}`} 
+                                                            <Icon
+                                                                key={i}
+                                                                name="star"
+                                                                className={`w-3 h-3 ${i < review.rating ? 'text-yellow-500 fill-current' : 'text-gray-300'}`}
                                                             />
                                                         ))}
                                                     </div>
@@ -346,7 +352,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({ user, course, allC
                                         metadata={{ course_id: course.id, user_id: user.id }}
                                     />
                                 ) : (
-                                    <button 
+                                    <button
                                         onClick={() => window.location.href = '/login'}
                                         className="w-full px-4 py-3 bg-brand-primary text-white font-bold rounded-lg hover:bg-brand-primary/90 transition-all shadow-md"
                                     >
