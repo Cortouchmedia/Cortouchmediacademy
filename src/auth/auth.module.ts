@@ -5,10 +5,10 @@ import { AuthController } from "./auth.controller";
 
 @Module({
   imports: [
-    ConfigModule, // This fixes the "UnknownDependenciesException"
+    ConfigModule, 
   ],
   providers: [AuthService],
   controllers: [AuthController],
-  exports: [AuthService], // Export it if other modules need it too
+  exports: [AuthService], 
 })
 export class AuthModule {}

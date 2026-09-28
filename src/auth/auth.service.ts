@@ -16,11 +16,11 @@ export class AuthService {
     email: string,
     full_name: string,
     password: string,
-    role: "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPERADMIN" = "STUDENT", // ✅ Updated to include all roles
+    role: "STUDENT" | "INSTRUCTOR" | "ADMIN" | "SUPERADMIN" = "STUDENT", 
   ) {
     this.logger.log(`Signup attempt for email: ${email} with role: ${role}`);
 
-    // Validate inputs
+
     if (!email || !password || !full_name) {
       this.logger.error("Missing required fields");
       throw new BadRequestException(

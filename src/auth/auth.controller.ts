@@ -9,12 +9,14 @@ import {
   Put,
   Query,
   BadRequestException,
-} from "@nestjs/common";
-import { AuthService } from "./auth.service";
-import { SupabaseService } from "../supabase/supabase.service"; // Fixed path
-import { RegisterDto } from "./dto/register.dto";
+} from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { SupabaseService } from '../supabase/supabase.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
-@Controller("api/auth")
+@Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
@@ -22,90 +24,83 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly supabaseService: SupabaseService,
   ) {
-    this.logger.log("AuthController initialized");
+    this.logger.log('AuthController initialized');
   }
 
   @Get()
   checkAuthStatus() {
-    return { message: "Auth endpoint is working" };
+    return { message: 'Auth endpoint is working' };
   }
 
-  @Post("signup")
+  @Post('signup')
   async signup(@Body() registerDto: RegisterDto) {
-    this.logger.log("Signup endpoint called");
+    this.logger.log('Signup endpoint called');
     const { email, password, full_name, role } = registerDto;
-    // Pass role (will default to 'STUDENT' if not provided)
     return this.authService.signup(
       email,
       full_name,
       password,
-      role || "STUDENT",
+      role || 'STUDENT',
     );
   }
 
-  @Post("signin")
-  async signin(@Body() body: { email?: string; password?: string }) {
-    this.logger.log("Signin endpoint called");
+  @Post('signin')
+  async signin(@Body() loginDto: LoginDto) {
+    this.logger.log('Signin endpoint called');
 
-    if (!body) {
-      throw new BadRequestException("Request body is required");
-    }
-
-    const { email, password } = body;
+    const { email, password } = loginDto;
 
     if (!email || !password) {
-      throw new BadRequestException("Email and password are required");
+      throw new BadRequestException('Email and password are required');
     }
 
     return this.authService.signin(email, password);
   }
 
-  @Post("signout")
+  @Post('signout')
   async signout() {
-    this.logger.log("Signout endpoint called");
+    this.logger.log('Signout endpoint called');
     return this.authService.signOut();
   }
 
-  @Get("profile")
+  @Get('profile')
   async getProfile(@Req() req: any) {
-    this.logger.log("Profile endpoint called");
+    this.logger.log('Profile endpoint called');
     const supabase = this.supabaseService.getClient();
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
-      this.logger.error("No token provided");
-      throw new UnauthorizedException("No token provided");
+      this.logger.error('No token provided');
+      throw new UnauthorizedException('No token provided');
     }
 
-    const token = authHeader.split(" ")[1];
+    const token = authHeader.split(' ')[1];
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      this.logger.error("Invalid token");
-      throw new UnauthorizedException("Invalid token");
+      this.logger.error('Invalid token');
+      throw new UnauthorizedException('Invalid token');
     }
 
-    // Try to get profile from profiles table
     let { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id) // Changed from 'user_id' to 'id' to match your schema
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
       .single();
 
-    // If profile doesn't exist, create one
-    if (profileError && profileError.code === "PGRST116") {
+    if (profileError && profileError.code === 'PGRST116') {
       this.logger.log(`Profile not found for user ${user.id}, creating one`);
 
       const { data: newProfile, error: insertError } = await supabase
-        .from("profiles")
+        .from('profiles')
         .insert({
-          id: user.id, // Changed from user_id to id
+          id: user.id,
           email: user.email,
           full_name: user.user_metadata?.full_name || null,
-          role: (user.user_metadata?.role || "STUDENT").toUpperCase(),
+          role: (user.user_metadata?.role || 'STUDENT').toUpperCase(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -123,29 +118,27 @@ export class AuthController {
     };
   }
 
-  @Put("users")
+  @Put('users')
   async updateUser(
-    @Query("id") userId: string,
-    @Body() updateData: { full_name?: string; role?: string },
+    @Query('id') userId: string,
+    @Body() updateData: UpdateUserDto,
     @Req() req: any,
   ) {
     this.logger.log(`PUT /users - Updating user: ${userId}`);
 
     if (!userId) {
-      throw new BadRequestException("User ID is required");
+      throw new BadRequestException('User ID is required');
     }
 
-    // Convert role to uppercase if provided and validate
     if (updateData.role) {
-      updateData.role = updateData.role.toUpperCase();
-      // Update to include ADMIN and SUPERADMIN if needed
+      updateData.role = updateData.role.toUpperCase() as any;
       if (
-        !["STUDENT", "INSTRUCTOR", "ADMIN", "SUPERADMIN"].includes(
+        !['STUDENT', 'INSTRUCTOR', 'ADMIN', 'SUPERADMIN'].includes(
           updateData.role,
         )
       ) {
         throw new BadRequestException(
-          "Role must be STUDENT, INSTRUCTOR, ADMIN, or SUPERADMIN",
+          'Role must be STUDENT, INSTRUCTOR, ADMIN, or SUPERADMIN',
         );
       }
     }
@@ -154,27 +147,26 @@ export class AuthController {
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
-      this.logger.error("No token provided");
-      throw new UnauthorizedException("No token provided");
+      this.logger.error('No token provided');
+      throw new UnauthorizedException('No token provided');
     }
 
-    const token = authHeader.split(" ")[1];
+    const token = authHeader.split(' ')[1];
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
-      this.logger.error("Invalid token");
-      throw new UnauthorizedException("Invalid token");
+      this.logger.error('Invalid token');
+      throw new UnauthorizedException('Invalid token');
     }
 
     if (user.id !== userId) {
       this.logger.error(`User ${user.id} tried to update user ${userId}`);
-      throw new UnauthorizedException("You can only update your own profile");
+      throw new UnauthorizedException('You can only update your own profile');
     }
 
-    // Prepare update data
     const updateFields: any = {};
     if (updateData.full_name !== undefined)
       updateFields.full_name = updateData.full_name;
@@ -182,24 +174,26 @@ export class AuthController {
     updateFields.updated_at = new Date().toISOString();
 
     const { data: profile, error: profileError } = await supabase
-      .from("profiles")
+      .from('profiles')
       .update(updateFields)
-      .eq("id", userId) // Changed from 'user_id' to 'id'
+      .eq('id', userId)
       .select()
       .single();
 
     if (profileError) {
-      if (profileError.code === "PGRST116") {
+      if (profileError.code === 'PGRST116') {
         this.logger.log(
           `Profile not found for user ${userId}, creating new profile`,
         );
 
         const { data: newProfile, error: insertError } = await supabase
-          .from("profiles")
+          .from('profiles')
           .insert({
-            id: userId, // Changed from user_id to id
+            id: userId,
             full_name: updateData.full_name || null,
-            role: updateData.role ? updateData.role.toUpperCase() : "STUDENT",
+            role: updateData.role
+              ? updateData.role.toUpperCase()
+              : 'STUDENT',
             email: user.email,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -213,12 +207,12 @@ export class AuthController {
         }
 
         return {
-          message: "Profile created successfully",
+          message: 'Profile created successfully',
           user: {
             id: userId,
             email: user.email,
             full_name: updateData.full_name || null,
-            role: updateData.role ? updateData.role.toUpperCase() : "STUDENT",
+            role: updateData.role ? updateData.role.toUpperCase() : 'STUDENT',
             profile: newProfile,
           },
         };
@@ -231,7 +225,7 @@ export class AuthController {
     this.logger.log(`User ${userId} updated successfully`);
 
     return {
-      message: "User updated successfully",
+      message: 'User updated successfully',
       user: {
         id: userId,
         email: user.email,
