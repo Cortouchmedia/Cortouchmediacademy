@@ -358,7 +358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setCourses(prev => prev.map(course => {
         if (course.id === courseId) {
-          // Use the history from the course object in the map to ensure we don't lose the user message
+          
           const updatedHistory = [...(course.chatHistory || []), botMsg];
           const updatedCourse = { ...course, chatHistory: updatedHistory, isAssistantTyping: false };
           if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
