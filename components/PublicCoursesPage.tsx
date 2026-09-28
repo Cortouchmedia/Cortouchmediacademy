@@ -12,16 +12,16 @@ import { translations } from "../constants/translations";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import type { Course, CourseWithEnrollment, User, Module, Lesson, Project } from "../types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
 
 interface PublicCoursesPageProps {
-  onNavigateToSignIn: () => void;
-  onNavigateToSignUp: () => void;
-  onEnrollmentSuccess: (courseId: number) => void;
   user: User | null;
   allCourses: CourseWithEnrollment[];
-  onProjectSubmit?: (courseId: number, projectId: number, submissionLink: string) => void;
-  onToggleLessonComplete?: (courseId: number, lessonId: number) => void;
-  onSendCourseMessage?: (courseId: number, text: string) => void;
 }
 
 // Real course images mapping by category
@@ -120,9 +120,9 @@ const generateDemoCourses = (): CourseWithEnrollment[] => {
     ]
   };
 
-  let generatedCourses: CourseWithEnrollment[] = [];
+  const generatedCourses: CourseWithEnrollment[] = [];
   let id = 1;
-  
+
   categories.forEach(category => {
     const categoryTitles = titles[category] || [
       `Advanced ${category}`,
@@ -131,11 +131,11 @@ const generateDemoCourses = (): CourseWithEnrollment[] => {
       `${category} Bootcamp`,
       `Complete ${category} Guide`
     ];
-    
+
     categoryTitles.forEach((title, index) => {
       const categoryImages = courseImages[category] || [defaultImage];
       const imageUrl = categoryImages[index % categoryImages.length];
-      
+
       const sampleModules: Module[] = [
         {
           id: 1,
@@ -168,7 +168,7 @@ const generateDemoCourses = (): CourseWithEnrollment[] => {
           progress: 0
         }
       ];
-      
+
       const sampleProjects: Project[] = [
         {
           id: 1,
@@ -189,17 +189,24 @@ const generateDemoCourses = (): CourseWithEnrollment[] => {
           isGrading: false
         }
       ];
-      
+
+      const seed = id * 1000;
+      const instructor = instructors[Math.floor(seededRandom(seed) * instructors.length)];
+      const price = Math.floor(seededRandom(seed + 1) * 100) + 20;
+      const rating = parseFloat((4 + seededRandom(seed + 2)).toFixed(1));
+      const enrollmentCount = Math.floor(seededRandom(seed + 3) * 5000) + 100;
+      const durationHours = Math.floor(seededRandom(seed + 4) * 40) + 5;
+
       generatedCourses.push({
         id: id,
         title: title,
-        instructor: instructors[Math.floor(Math.random() * instructors.length)],
+        instructor: instructor,
         category: category,
-        price: Math.floor(Math.random() * 100) + 20,
-        rating: parseFloat((4 + Math.random()).toFixed(1)),
-        enrollmentCount: Math.floor(Math.random() * 5000) + 100,
+        price: price,
+        rating: rating,
+        enrollmentCount: enrollmentCount,
         imageUrl: imageUrl,
-        duration: `${Math.floor(Math.random() * 40) + 5} hours`,
+        duration: `${durationHours} hours`,
         description: `Learn ${title} from industry experts. Master ${category} with hands-on projects and real-world examples. This comprehensive course will take you from beginner to advanced level.`,
         modules: 3,
         progress: 0,
@@ -225,28 +232,36 @@ const generateDemoCourses = (): CourseWithEnrollment[] => {
           "Computer with internet connection",
           "Willingness to learn and practice"
         ],
-        instructorBio: `${instructors[Math.floor(Math.random() * instructors.length)]} is a passionate educator with over 10 years of experience in ${category}. They have helped thousands of students achieve their learning goals through practical, hands-on teaching methods.`
+        instructorBio: `${instructor} is a passionate educator with over 10 years of experience in ${category}. They have helped thousands of students achieve their learning goals through practical, hands-on teaching methods.`
       });
       id++;
     });
   });
-  
+
   return generatedCourses;
 };
 
 export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
-  onNavigateToSignIn,
-  onNavigateToSignUp,
-  onEnrollmentSuccess,
   user,
   allCourses: initialCourses,
-  onProjectSubmit,
-  onToggleLessonComplete,
-  onSendCourseMessage,
 }) => {
-  const { language } = useAppContext();
+  const {
+    language,
+    handleEnrollmentSuccess,
+    handleProjectSubmit,
+    handleToggleLessonComplete,
+    handleSendCourseMessage,
+  } = useAppContext();
   const t = translations[language];
-  
+  const router = useRouter();
+
+  const onNavigateToSignIn = () => router.push('/login');
+  const onNavigateToSignUp = () => router.push('/signup');
+  const onEnrollmentSuccess = handleEnrollmentSuccess;
+  const onProjectSubmit = handleProjectSubmit;
+  const onToggleLessonComplete = handleToggleLessonComplete;
+  const onSendCourseMessage = handleSendCourseMessage;
+
   const [selectedCourse, setSelectedCourse] = useState<CourseWithEnrollment | null>(null);
   const [showCourseDetails, setShowCourseDetails] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
@@ -262,7 +277,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   // Generate demo courses
   const allCourses = useMemo(() => {
     let courses = generateDemoCourses();
-    
+
     // Update enrollment status based on user
     if (user && user.enrolledCourseIds && user.enrolledCourseIds.length > 0) {
       courses = courses.map(course => ({
@@ -270,7 +285,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
         isEnrolled: user.enrolledCourseIds.includes(course.id)
       }));
     }
-    
+
     return courses;
   }, [user]);
 
@@ -282,7 +297,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   // Handle course selection - ALLOW ANYONE to view course details
   const handleCourseSelect = (course: CourseWithEnrollment) => {
     console.log("Course selected:", course.title);
-    
+
     // Allow anyone to view course details (no login required)
     const fullCourse = allCourses.find(c => c.id === course.id);
     if (fullCourse) {
@@ -313,8 +328,8 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
       setIsSearching(false);
       return;
     }
-    
-    const results = allCourses.filter(course => 
+
+    const results = allCourses.filter(course =>
       course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.category.toLowerCase().includes(searchQuery.toLowerCase())
@@ -333,15 +348,15 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
 
   const filteredCourses = useMemo(() => {
     let courses = isSearching ? searchResults : allCourses;
-    
+
     if (!isSearching && activeCategory !== "All") {
       courses = courses.filter(course => course.category === activeCategory);
     }
-    
-    courses = courses.filter(course => 
+
+    courses = courses.filter(course =>
       course.price >= priceRange[0] && course.price <= priceRange[1]
     );
-    
+
     switch (sortBy) {
       case "popular":
         courses = [...courses].sort((a, b) => b.enrollmentCount - a.enrollmentCount);
@@ -356,7 +371,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
         courses = [...courses].sort((a, b) => b.price - a.price);
         break;
     }
-    
+
     return courses;
   }, [isSearching, searchResults, allCourses, activeCategory, priceRange, sortBy]);
 
@@ -375,14 +390,14 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   if (showCourseDetails && selectedCourse) {
     return (
       <div className="min-h-screen flex flex-col">
-        <PublicHeader 
-          user={user} 
-          onNavigateToSignIn={onNavigateToSignIn} 
-          onNavigateToSignUp={onNavigateToSignUp} 
+        <PublicHeader
+          user={user}
+          onNavigateToSignIn={onNavigateToSignIn}
+          onNavigateToSignUp={onNavigateToSignUp}
         />
         <main className="flex-1 pt-[73px] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
           <CourseDetails
-            user={user} 
+            user={user}
             course={selectedCourse}
             allCourses={allCourses}
             onBack={handleBackToCourses}
@@ -400,9 +415,9 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   return (
     <div className="text-gray-800 font-sans bg-white min-h-screen flex flex-col">
       {/* Header */}
-      <PublicHeader 
-        user={user} 
-        onNavigateToSignIn={onNavigateToSignIn} 
+      <PublicHeader
+        user={user}
+        onNavigateToSignIn={onNavigateToSignIn}
         onNavigateToSignUp={onNavigateToSignUp}
         searchQuery={searchQuery}
         onSearch={(query) => setSearchQuery(query)}
@@ -414,17 +429,17 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {isSearching 
-                  ? `${t.searchResultsFor || "Search results for"} "${searchQuery}"` 
+                {isSearching
+                  ? `${t.searchResultsFor || "Search results for"} "${searchQuery}"`
                   : t.broadSelection || "Browse Our Courses"}
               </h1>
               <p className="text-gray-600 mt-2">
-                {isSearching 
+                {isSearching
                   ? `${filteredCourses.length} ${t.foundCourses?.replace('{count}', '') || "courses found"}`
                   : `${allCourses.length}+ ${t.selectionSubtitle || "courses to choose from"}`}
               </p>
             </div>
-            
+
             {/* Sort and filter controls */}
             <div className="flex items-center gap-3">
               <button
@@ -434,7 +449,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                 <Icon name="filter" className="w-4 h-4" />
                 {showFilters ? "Hide Filters" : "Show Filters"}
               </button>
-              
+
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
@@ -477,7 +492,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                     />
                   </div>
                 </div>
-                
+
                 <div className="flex items-end">
                   <button
                     onClick={() => {
@@ -501,8 +516,8 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
                   className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
-                    activeCategory === cat 
-                      ? 'bg-[#219BD5] text-white shadow-md' 
+                    activeCategory === cat
+                      ? 'bg-[#219BD5] text-white shadow-md'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -530,9 +545,9 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {paginatedCourses.map(course => (
-                  <CourseCard 
-                    key={course.id} 
-                    course={course} 
+                  <CourseCard
+                    key={course.id}
+                    course={course}
                     onCourseSelect={handleCourseSelect}
                     isRecommended={course.enrollmentCount > 3000}
                   />
@@ -549,7 +564,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                   >
                     Previous
                   </button>
-                  
+
                   <div className="flex gap-1">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNum;
@@ -562,7 +577,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                       } else {
                         pageNum = currentPage - 2 + i;
                       }
-                      
+
                       return (
                         <button
                           key={pageNum}
@@ -578,7 +593,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                       );
                     })}
                   </div>
-                  
+
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}

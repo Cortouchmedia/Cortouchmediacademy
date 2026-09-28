@@ -78,14 +78,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 1, text: "Hello! I'm your AI assistant. How can I help you with your learning journey today?", sender: 'bot', timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }
+    { id: 1, text: "Hello! I'm your AI assistant. How can I help you with your learning journey today?", sender: 'bot', timestamp: '--:--' }
   ]);
   const [searchQuery, setSearchQuery] = useState('');
   const [language, setLanguage] = useState<'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig'>('en');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
-    { id: 1, userId: 1, userName: 'Alex Morgan', action: 'System Login', details: 'Admin logged into the system', timestamp: new Date(Date.now() - 3600000).toISOString(), type: 'auth' },
-    { id: 2, userId: 1, userName: 'Alex Morgan', action: 'User Created', details: 'Created new student account: Jane Doe', timestamp: new Date(Date.now() - 7200000).toISOString(), type: 'user' },
-    { id: 3, userId: 1, userName: 'Alex Morgan', action: 'Course Published', details: 'Published UI/UX Design Masterclass', timestamp: new Date(Date.now() - 86400000).toISOString(), type: 'course' },
+    { id: 1, userId: 1, userName: 'Alex Morgan', action: 'System Login', details: 'Admin logged into the system', timestamp: '2024-01-15T10:00:00.000Z', type: 'auth' },
+    { id: 2, userId: 1, userName: 'Alex Morgan', action: 'User Created', details: 'Created new student account: Jane Doe', timestamp: '2024-01-15T09:00:00.000Z', type: 'user' },
+    { id: 3, userId: 1, userName: 'Alex Morgan', action: 'Course Published', details: 'Published UI/UX Design Masterclass', timestamp: '2024-01-14T10:00:00.000Z', type: 'course' },
   ]);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [instructorMessages, setInstructorMessages] = useState<InstructorMessage[]>([]);

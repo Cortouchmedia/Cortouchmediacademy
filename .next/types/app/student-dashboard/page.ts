@@ -1,4 +1,4 @@
-// File: /Users/mac/Documents/cortouch-media-academy/app/student-dashboard/page.tsx
+// File: /Users/mac/Cortouchmediacademy/app/student-dashboard/page.tsx
 import * as entry from '../../../../app/student-dashboard/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
