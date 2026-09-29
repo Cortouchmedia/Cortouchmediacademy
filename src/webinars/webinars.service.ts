@@ -22,10 +22,10 @@ export class WebinarsService {
 
   // ==================== WEBINAR MANAGEMENT ====================
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
   async createWebinar(createWebinarDto: CreateWebinarDto) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Calculate duration
     const start = new Date(createWebinarDto.start_time);
@@ -63,7 +63,7 @@ export class WebinarsService {
     page?: number;
     limit?: number;
   }) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     let query = supabase.from("webinars").select(`
         *,
@@ -119,7 +119,7 @@ export class WebinarsService {
   }
 
   async getWebinarById(webinarId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: webinar, error } = await supabase
       .from("webinars")
@@ -170,7 +170,7 @@ export class WebinarsService {
     instructorId: string,
     updateWebinarDto: UpdateWebinarDto,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Verify ownership
     const { data: webinar } = await supabase
@@ -207,7 +207,7 @@ export class WebinarsService {
   }
 
   async deleteWebinar(webinarId: string, instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: webinar } = await supabase
       .from("webinars")
@@ -242,7 +242,7 @@ export class WebinarsService {
   // src/webinars/webinars.service.ts - Replace the registerForWebinar method
 
   async registerForWebinar(registerDto: RegisterForWebinarDto) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     this.logger.log(
       `Registering user ${registerDto.user_id} for webinar ${registerDto.webinar_id}`,
@@ -325,7 +325,7 @@ export class WebinarsService {
   }
 
   async markAttendance(webinarId: string, userId: string, attended: boolean) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinar_registrations")
@@ -353,7 +353,7 @@ export class WebinarsService {
     userId: string,
     durationMinutes: number,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinar_registrations")
@@ -376,7 +376,7 @@ export class WebinarsService {
   }
 
   async getUserRegistrations(userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinar_registrations")
@@ -399,7 +399,7 @@ export class WebinarsService {
   }
 
   async getWebinarRegistrations(webinarId: string, instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Verify instructor owns this webinar
     const { data: webinar } = await supabase
@@ -439,7 +439,7 @@ export class WebinarsService {
   // src/webinars/webinars.service.ts - Fix the submitFeedback method
 
   async submitFeedback(feedbackDto: SubmitWebinarFeedbackDto) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Add validation
     if (!feedbackDto) {
@@ -524,7 +524,7 @@ export class WebinarsService {
   }
 
   async getWebinarFeedback(webinarId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinar_registrations")
@@ -563,7 +563,7 @@ export class WebinarsService {
   // ==================== CHAT MESSAGES ====================
 
   async sendChatMessage(chatDto: SendChatMessageDto) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Check if user is registered
     const { data: registration } = await supabase
@@ -596,7 +596,7 @@ export class WebinarsService {
   }
 
   async getChatMessages(webinarId: string, limit = 50) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinar_chat_messages")
@@ -622,7 +622,7 @@ export class WebinarsService {
   // ==================== UPCOMING WEBINARS ====================
 
   async getUpcomingWebinars(userId?: string, limit = 10) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     let query = supabase
       .from("webinars")
@@ -657,7 +657,7 @@ export class WebinarsService {
   // In your webinars.service.ts, update getLiveWebinars method:
 
   async getLiveWebinars() {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("webinars")

@@ -34,7 +34,7 @@ export class VideosService {
   ) {}
 
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
 
   // Helper method to extract course_id from lesson

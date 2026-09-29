@@ -28,7 +28,7 @@ export class PaymentsService {
   ) {}
 
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
 
   // ==================== COURSE PURCHASE ====================

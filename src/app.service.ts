@@ -12,7 +12,7 @@ export class AppService {
   }
 
   async getCourses() {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase.from('courses').select('*');
 
@@ -32,7 +32,7 @@ export class AppService {
     website?: string,
     role: string = 'STUDENT',
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -72,7 +72,7 @@ export class AppService {
   }
 
   async login(email: string, password: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -84,7 +84,7 @@ export class AppService {
   }
 
   async signOut() {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { error } = await supabase.auth.signOut();
     if (error) return { error: error.message };
@@ -92,7 +92,7 @@ export class AppService {
   }
 
   async getUserProfile(userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from('profiles')
@@ -105,7 +105,7 @@ export class AppService {
   }
 
   async currentUserProfile() {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Get current session
     const {

@@ -21,7 +21,7 @@ export class RevenueService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
 
   // ==================== EARNINGS MANAGEMENT ====================

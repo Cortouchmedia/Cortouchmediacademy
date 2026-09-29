@@ -17,7 +17,7 @@ export class CoursesService {
   // ==================== COURSE MANAGEMENT ====================
 
   async createCourse(instructorId: string, createCourseDto: any) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("courses")
@@ -45,7 +45,7 @@ export class CoursesService {
     level?: string;
     search?: string;
   }) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     let query = supabase
       .from("courses")
@@ -82,7 +82,7 @@ export class CoursesService {
   }
 
   async getCourseById(courseId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: course, error: courseError } = await supabase
       .from("courses")
@@ -143,7 +143,7 @@ export class CoursesService {
     instructorId: string,
     updateCourseDto: any,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: existingCourse, error: findError } = await supabase
       .from("courses")
@@ -180,7 +180,7 @@ export class CoursesService {
   }
 
   async deleteCourse(courseId: string, instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { error } = await supabase
       .from("courses")
@@ -199,7 +199,7 @@ export class CoursesService {
   }
 
   async getInstructorCourses(instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("courses")
@@ -224,7 +224,7 @@ export class CoursesService {
     instructorId: string,
     createModuleDto: any,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: course, error: courseError } = await supabase
       .from("courses")
@@ -257,7 +257,7 @@ export class CoursesService {
   }
 
   async updateModule(moduleId: string, instructorId: string, updateData: any) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: module, error: moduleError } = await supabase
       .from("course_modules")
@@ -299,7 +299,7 @@ export class CoursesService {
   }
 
   async deleteModule(moduleId: string, instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: module, error: moduleError } = await supabase
       .from("course_modules")
@@ -345,7 +345,7 @@ export class CoursesService {
     instructorId: string,
     createLessonDto: any,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: module, error: moduleError } = await supabase
       .from("course_modules")
@@ -387,7 +387,7 @@ export class CoursesService {
   }
 
   async updateLesson(lessonId: string, instructorId: string, updateData: any) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
       .from("course_lessons")
@@ -434,7 +434,7 @@ export class CoursesService {
   }
 
   async deleteLesson(lessonId: string, instructorId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
       .from("course_lessons")
@@ -481,7 +481,7 @@ export class CoursesService {
   // ==================== ENROLLMENT & PROGRESS ====================
 
   async enrollInCourse(userId: string, courseId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase
       .from("course_enrollments")
@@ -524,7 +524,7 @@ export class CoursesService {
   }
 
   async getUserEnrollments(userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("course_enrollments")
@@ -548,7 +548,7 @@ export class CoursesService {
   }
 
   async getCourseProgress(userId: string, courseId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Get enrollment
     const { data: enrollment, error: enrollmentError } = await supabase
@@ -654,7 +654,7 @@ export class CoursesService {
   }
 
   async updateLessonProgress(userId: string, progressDto: any) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase
       .from("user_lesson_progress")
@@ -708,7 +708,7 @@ export class CoursesService {
   }
 
   private async updateCourseProgress(userId: string, lessonId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Get module_id from lesson
     const { data: lesson } = await supabase
@@ -768,7 +768,7 @@ export class CoursesService {
   // ==================== REVIEWS ====================
 
   async addReview(userId: string, createReviewDto: any) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: enrollment } = await supabase
       .from("course_enrollments")
@@ -812,7 +812,7 @@ export class CoursesService {
   }
 
   async getCourseReviews(courseId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("course_reviews")

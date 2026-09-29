@@ -18,7 +18,7 @@ export class ForumService {
   // ==================== CATEGORIES ====================
 
   async getAllCategories() {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("forum_categories")
@@ -48,7 +48,7 @@ export class ForumService {
   }
 
   async getCategoryById(categoryId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("forum_categories")
@@ -66,7 +66,7 @@ export class ForumService {
   // ==================== TOPICS ====================
 
   async createTopic(userId: string, createTopicDto: CreateTopicDto) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("forum_topics")
@@ -94,7 +94,7 @@ export class ForumService {
     page?: number;
     limit?: number;
   }) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     let query = supabase.from("forum_topics").select(`
         *,
@@ -157,7 +157,7 @@ export class ForumService {
   }
 
   async getTopicById(topicId: string, userId?: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Get topic with basic relations (no required joins)
     const { data: topic, error: topicError } = await supabase
@@ -223,7 +223,7 @@ export class ForumService {
     userId: string,
     updateTopicDto: UpdateTopicDto,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Check if user owns the topic
     const { data: topic } = await supabase
@@ -258,7 +258,7 @@ export class ForumService {
   }
 
   async deleteTopic(topicId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: topic } = await supabase
       .from("forum_topics")
@@ -287,7 +287,7 @@ export class ForumService {
   }
 
   async likeTopic(topicId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Check if already liked
     const { data: existing } = await supabase
@@ -324,7 +324,7 @@ export class ForumService {
   }
 
   async bookmarkTopic(topicId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase
       .from("forum_bookmarks")
@@ -348,7 +348,7 @@ export class ForumService {
   }
 
   async getUserBookmarks(userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("forum_bookmarks")
@@ -379,7 +379,7 @@ export class ForumService {
     userId: string,
     createReplyDto: CreateReplyDto,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Check if topic is locked
     const { data: topic } = await supabase
@@ -417,7 +417,7 @@ export class ForumService {
     userId: string,
     updateReplyDto: UpdateReplyDto,
   ) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: reply } = await supabase
       .from("forum_replies")
@@ -451,7 +451,7 @@ export class ForumService {
   }
 
   async deleteReply(replyId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: reply } = await supabase
       .from("forum_replies")
@@ -480,7 +480,7 @@ export class ForumService {
   }
 
   async markAsSolution(replyId: string, topicId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     // Check if user is the topic owner
     const { data: topic } = await supabase
@@ -517,7 +517,7 @@ export class ForumService {
   }
 
   async likeReply(replyId: string, userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase
       .from("forum_likes")
@@ -553,7 +553,7 @@ export class ForumService {
   // ==================== REAL-TIME ====================
 
   subscribeToTopic(topicId: string, callback: (payload: any) => void) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     return supabase
       .channel(`topic-${topicId}`)
@@ -573,7 +573,7 @@ export class ForumService {
   }
 
   subscribeToNewTopics(callback: (payload: any) => void) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     return supabase
       .channel("new-topics")

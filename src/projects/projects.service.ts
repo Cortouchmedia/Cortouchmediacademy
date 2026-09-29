@@ -35,7 +35,7 @@ export class ProjectsService {
   ) {}
 
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
 
   // ==================== PROJECT MANAGEMENT ====================

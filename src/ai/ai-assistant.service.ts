@@ -304,7 +304,7 @@ export class AiAssistantService implements OnModuleInit {
   }
 
   private async getCourseContent(courseId: string): Promise<string> {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: course } = await supabase
       .from("courses")
@@ -340,7 +340,7 @@ export class AiAssistantService implements OnModuleInit {
     userId: string,
     courseId: string,
   ): Promise<string> {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data: progress } = await supabase
       .from("course_enrollments")

@@ -14,7 +14,7 @@ export class UsersService {
 
   async findAll() {
     try {
-      const supabase = this.supabaseService.getClient();
+      const supabase = this.supabaseService.getAdminClient();
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -45,7 +45,7 @@ export class UsersService {
 
   async findOne(id: string) {
     try {
-      const supabase = this.supabaseService.getClient();
+      const supabase = this.supabaseService.getAdminClient();
 
       const { data, error } = await supabase
         .from("profiles")
@@ -95,7 +95,7 @@ export class UsersService {
 
   async create(id: string, userData?: any) {
     try {
-      const supabase = this.supabaseService.getClient();
+      const supabase = this.supabaseService.getAdminClient();
 
       const defaultProfile = {
         id: id,
@@ -144,7 +144,7 @@ export class UsersService {
 
   async update(id: string, updates: any) {
     try {
-      const supabase = this.supabaseService.getClient();
+      const supabase = this.supabaseService.getAdminClient();
 
       const { data, error } = await supabase
         .from("profiles")

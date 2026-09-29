@@ -14,7 +14,7 @@ export class CertificatesService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   async getUserCertificates(userId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("certificates")
@@ -38,7 +38,7 @@ export class CertificatesService {
   }
 
   async getCertificateById(certificateId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("certificates")
@@ -60,7 +60,7 @@ export class CertificatesService {
   }
 
   async getCertificateByCourse(userId: string, courseId: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("certificates")
@@ -77,7 +77,7 @@ export class CertificatesService {
   }
 
   async verifyCertificate(verificationCode: string) {
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("certificates")
