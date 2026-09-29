@@ -66,7 +66,7 @@ export class AuthController {
   @Get('profile')
   async getProfile(@Req() req: any) {
     this.logger.log('Profile endpoint called');
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
