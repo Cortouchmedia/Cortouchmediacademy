@@ -29,7 +29,7 @@ export class AssetsService {
   ) {}
 
   getSupabaseClient() {
-    return this.supabaseService.getClient();
+    return this.supabaseService.getAdminClient();
   }
 
   // ==================== IMAGE UPLOAD ====================
@@ -301,10 +301,17 @@ export class AssetsService {
         tableName = "courses";
         fieldName = imageType === "thumbnail" ? "image_url" : "cover_url";
         break;
-      case "user":
-        tableName = "profiles";
-        fieldName = "profile_picture";
-        break;
+        case "user":
+          tableName = "profiles";
+          fieldName = "profile_picture";
+          await supabase
+            .from("profiles")
+            .update({
+              avatar_url: imageUrl,
+              updated_at: new Date(),
+            })
+            .eq("id", entityId);
+          break;
       case "lesson":
         tableName = "course_lessons";
         fieldName = "thumbnail_url";
