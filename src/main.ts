@@ -11,7 +11,9 @@ async function bootstrap() {
       'http://localhost:3000',        // local Next.js
       'http://localhost:5173',        // local Vite (if you use it)
       'https://cortouch.tech', // production frontend
-      /\.railway\.app$/,              // any Railway preview URL
+      'https://cortouchmediacademy.vercel.app',
+      /\.railway\.app$/,
+  /\.vercel\.app$/,            // any Railway preview URL
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
