@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 config.bat
 .next
+.env
+.env.local
+tsconfig.tsbuildinfo

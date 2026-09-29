@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import type { Page, Course, User, ChatMessage, CourseWithEnrollment, AuditLog, PayoutRequest, InstructorMessage, Lesson, Webinar } from '../types';
+import { Api, authStorage } from '../lib/api';
 import { mockUsers, mockCourses } from '../constants';
 
 interface AppContextType {
@@ -16,6 +17,7 @@ interface AppContextType {
   completedCourse: Course | null;
   isChatOpen: boolean;
   isBotTyping: boolean;
+  isHydrated: boolean;
   messages: ChatMessage[];
   searchQuery: string;
   language: 'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig';
@@ -36,13 +38,16 @@ interface AppContextType {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setSearchQuery: (query: string) => void;
   setLanguage: (lang: 'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig') => void;
-  handleLogin: (role?: 'admin' | 'student' | 'instructor') => void;
+  handleLogin: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   handleLogout: () => void;
   handleNavigate: (page: Page) => void;
   handleCourseSelect: (course: Course) => void;
   handleSearchChange: (query: string) => void;
   handleUserUpdate: (updatedUser: User) => void;
-  handleUserDelete: (userId: number) => void;
+  handleUserDelete: (userId: string) => void;  
   handleUserAdd: (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => void;
   handleEnrollmentSuccess: (courseId: number) => void;
   handleToggleLessonComplete: (courseId: number, lessonId: number) => void;
@@ -51,7 +56,7 @@ interface AppContextType {
   handleSendCourseMessage: (courseId: number, text: string) => Promise<void>;
   logAuditEvent: (action: string, details: string, type: AuditLog['type']) => void;
   handleInstructorCourseAdd: (courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>, initialModules?: { title: string }[]) => void;
-  handleInstructorMessageSend: (studentId: number, text: string) => void;
+  handleInstructorMessageSend: (studentId: string, text: string) => void;
   handlePayoutRequest: (payoutData: Omit<PayoutRequest, 'id' | 'instructorId' | 'status' | 'timestamp'>) => void;
   handleCourseUpdate: (courseId: number, updatedDetails: Partial<Course>) => void;
   handleCourseDelete: (courseId: number) => void;
@@ -68,9 +73,9 @@ const ai = process.env.NEXT_PUBLIC_GEMINI_API_KEY ? new GoogleGenAI({ apiKey: pr
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [courses, setCourses] = useState<Course[]>(mockCourses);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('Dashboard');
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -82,18 +87,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
   const [searchQuery, setSearchQuery] = useState('');
   const [language, setLanguage] = useState<'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig'>('en');
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([
-    { id: 1, userId: 1, userName: 'Alex Morgan', action: 'System Login', details: 'Admin logged into the system', timestamp: '2024-01-15T10:00:00.000Z', type: 'auth' },
-    { id: 2, userId: 1, userName: 'Alex Morgan', action: 'User Created', details: 'Created new student account: Jane Doe', timestamp: '2024-01-15T09:00:00.000Z', type: 'user' },
-    { id: 3, userId: 1, userName: 'Alex Morgan', action: 'Course Published', details: 'Published UI/UX Design Masterclass', timestamp: '2024-01-14T10:00:00.000Z', type: 'course' },
-  ]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [instructorMessages, setInstructorMessages] = useState<InstructorMessage[]>([]);
+   
+
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+    
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedUser = localStorage.getItem('auth_user');
+    const storedToken = localStorage.getItem('auth_token');
+    if (storedUser && storedToken) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        setCurrentUser(parsed);
+        setIsLoggedIn(true);
+      } catch {
+        localStorage.removeItem('auth_user');
+        localStorage.removeItem('auth_token');
+      }
+    }
+    setIsHydrated(true);   
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (currentUser) {
+      localStorage.setItem('auth_user', JSON.stringify(currentUser));
+    }
+  }, [currentUser]);
 
   const logAuditEvent = (action: string, details: string, type: AuditLog['type']) => {
     const newLog: AuditLog = {
       id: Math.max(...auditLogs.map(l => l.id), 0) + 1,
-      userId: currentUser?.id || 0,
+      userId: currentUser?.id ?? '',       // ✅ empty string instead of 0
       userName: currentUser?.name || 'System',
       action,
       details,
@@ -103,17 +132,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuditLogs(prev => [newLog, ...prev]);
   };
 
-  const handleLogin = (role?: 'admin' | 'student' | 'instructor') => {
-    let user = users.find(u => u.role === (role || 'admin')) || users[0];
-    setCurrentUser(user);
-    setIsLoggedIn(true);
-    logAuditEvent('Login', `${user.name} logged in as ${user.role}`, 'auth');
-    if (user.role === 'instructor') {
-      setCurrentPage('Instructor Dashboard');
-    } else if (user.role === 'admin') {
-      setCurrentPage('Admin');
-    } else {
-      setCurrentPage('Dashboard');
+  const handleLogin = async (
+    email: string,
+    password: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // 1. Call backend signin
+      const result = await Api.auth.signin({ email, password });
+  
+      if (!result?.session?.access_token) {
+        return { success: false, error: 'No session returned from server' };
+      }
+  
+      // 2. Store the JWT
+      authStorage.setToken(result.session.access_token);
+  
+      // 3. Fetch the full user + profile
+      const profileData = await Api.auth.profile(result.session.access_token);
+  
+      // 4. Build a proper User object with the REAL UUID
+      const rawRole = (profileData.profile?.role ?? 'STUDENT')
+        .toString()
+        .toLowerCase();
+      const role: User['role'] =
+        rawRole === 'admin' ||
+        rawRole === 'superadmin' ||
+        rawRole === 'instructor' ||
+        rawRole === 'student'
+          ? (rawRole === 'superadmin' ? 'admin' : rawRole)
+          : 'student';
+  
+      const realUser: User = {
+        id: profileData.id,                                        // ✅ UUID string
+        name: profileData.profile?.full_name ?? profileData.email,
+        email: profileData.email,
+        avatarUrl: profileData.profile?.avatar_url ?? '',
+        role,
+        enrolledCourseIds: [],                                     // TODO: fetch from backend
+      };
+  
+      // 5. Update state
+      setCurrentUser(realUser);
+      setIsLoggedIn(true);
+      logAuditEvent('Login', `${realUser.name} logged in as ${realUser.role}`, 'auth');
+  
+    
+          // 6. Route based on role
+          if (role === 'instructor') setCurrentPage('Instructor Dashboard');
+          else if (role === 'admin') setCurrentPage('Admin');
+          else setCurrentPage('Dashboard');
+    
+          // 7. Persist to localStorage so rehydrate finds the user immediately
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_user', JSON.stringify(realUser));
+            console.log('💾 Saved auth_user to localStorage:', realUser.email);
+          }
+    
+          return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message ?? 'Login failed. Please try again.',
+      };
     }
   };
 
@@ -125,6 +205,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(null);
     setCurrentPage('Dashboard');
     setSelectedCourse(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_user');
+      localStorage.removeItem('auth_token');
+    }
   };
 
   const handleNavigate = (page: Page) => {
@@ -154,7 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
   };
 
-  const handleUserDelete = (userId: number) => {
+  const handleUserDelete = (userId: string) => {
     const userToDelete = users.find(u => u.id === userId);
     if (userToDelete) {
       logAuditEvent('User Deleted', `Deleted user: ${userToDelete.name}`, 'user');
@@ -165,11 +249,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const handleUserAdd = (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => {
     const newUser: User = {
       ...userData,
-      id: Math.max(...users.map(u => u.id), 0) + 1,
-      enrolledCourseIds: []
+      id:
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      enrolledCourseIds: [],
     };
-    logAuditEvent('User Created', `Created new user: ${newUser.name} as ${newUser.role}`, 'user');
-    setUsers(prev => [...prev, newUser]);
+    logAuditEvent(
+      'User Created',
+      `Created new user: ${newUser.name} as ${newUser.role}`,
+      'user',
+    );
+    setUsers((prev) => [...prev, newUser]);
   };
 
   const handleEnrollmentSuccess = (courseId: number) => {
@@ -516,7 +607,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     logAuditEvent('Webinar Deleted', `Deleted webinar ID: ${webinarId} from course ID: ${courseId}`, 'course');
   };
 
-  const handleInstructorMessageSend = (studentId: number, text: string) => {
+  const handleInstructorMessageSend = (studentId: string, text: string) => {
     if (!currentUser) return;
     const newMessage: InstructorMessage = {
       id: Date.now(),
@@ -544,7 +635,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value = {
     isLoggedIn, currentUser, users, courses, currentPage, selectedCourse, editingCourse, completedCourse,
-    isChatOpen, isBotTyping, messages, searchQuery, language, coursesWithEnrollmentStatus, filteredCourses, auditLogs,
+    isChatOpen, isBotTyping, isHydrated, messages, searchQuery, language, coursesWithEnrollmentStatus, filteredCourses, auditLogs,
     payoutRequests, instructorMessages,
     setIsLoggedIn, setCurrentUser, setCourses, setCurrentPage, setSelectedCourse, setEditingCourse,
     setCompletedCourse, setIsChatOpen, setIsBotTyping, setMessages, setSearchQuery, setLanguage,

@@ -13,7 +13,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LandingPage } from './LandingPage';
 import { SignInPage } from './SignInPage';
 import { SignUpPage } from './SignUpPage';
-import { AdminSignInPage } from './AdminSignInPage';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const {
@@ -26,6 +25,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Sync URL → currentPage (for sidebar highlighting etc.)
   React.useEffect(() => {
     if (isLoggedIn && currentUser) {
       const path = pathname.split('/')[1];
@@ -45,6 +45,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, isLoggedIn, currentUser, handleNavigate]);
 
+  // Root redirect based on role
   React.useEffect(() => {
     if (isLoggedIn && currentUser && pathname === '/') {
       if (currentUser.role === 'admin') router.push('/admin');
@@ -62,49 +63,40 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     setAuthView('signUp');
   };
   const handleNavigateToSignIn = () => {
-    if (pathname.startsWith('/admin')) {
-      router.push('/admin/login');
-    } else {
-      router.push('/login');
-    }
+    router.push('/login');
     setAuthView('signIn');
   };
 
+  // ----------------------------------------------------------
+  // Not authenticated: route to the appropriate public page
+  // ----------------------------------------------------------
   if (!isLoggedIn || !currentUser) {
-    if (pathname === '/admin/login') {
+    if (pathname === '/login') {
+      return <SignInPage />;
+    }
+    if (pathname === '/signup') {
+      return <SignUpPage />;
+    }
+    if (pathname === '/') {
       return (
-        <AdminSignInPage
-          onSignIn={(role) => {
-            handleLogin(role);
-            router.push('/admin');
-          }}
+        <LandingPage
+          onNavigateToSignIn={handleNavigateToSignIn}
+          onNavigateToSignUp={handleNavigateToSignUp}
+          courses={courses}
         />
       );
     }
 
-    if (pathname === '/login') {
-      return <SignInPage />;
-    }
-
-    if (pathname === '/signup' || authView === 'signUp') {
-      return <SignUpPage />;
-    }
-
-    if (pathname.startsWith('/courses')) {
-      return children;
-    }
-
-    return (
-      <LandingPage
-        onNavigateToSignIn={handleNavigateToSignIn}
-        onNavigateToSignUp={handleNavigateToSignUp}
-        courses={courses}
-      />
-    );
+    // ✅ Any other route: render the child page.
+    // The child page (e.g. /student-dashboard) redirects to /login if needed.
+    return <>{children}</>;
   }
 
+  // ----------------------------------------------------------
+  // Authenticated
+  // ----------------------------------------------------------
   if (pathname === '/') {
-    return null;
+    return null; // will redirect via useEffect
   }
 
   return (
@@ -122,10 +114,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {isAdminRoute && currentUser.role === 'admin' ? (
               <AdminSidebar user={currentUser} onLogout={handleLogout} />
             ) : (
-              <Sidebar 
-              user={currentUser} 
-              activePage={currentPage} 
-            />
+              <Sidebar user={currentUser} activePage={currentPage} />
             )}
           </div>
 
@@ -161,7 +150,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               isOpen={isChatOpen}
               onToggle={() => setIsChatOpen(!isChatOpen)}
               messages={messages}
-              onSendMessage={(text) => {}}
+              onSendMessage={() => {}}
               isBotTyping={isBotTyping}
             />
           )}

@@ -52,7 +52,7 @@ export default function AdminUsersPage() {
     });
   };
 
-  const handleDeleteClick = (userId: number) => {
+  const handleDeleteClick = (userId: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       handleUserDelete(userId);
     }

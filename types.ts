@@ -3,12 +3,12 @@ import React from 'react';
 export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students' | 'Profile' | 'Audit Log';
 
 export interface User {
-  id: number;
+  id: string;                       // ✅ UUID from Supabase auth
   name: string;
   email: string;
   avatarUrl: string;
   role: 'student' | 'admin' | 'instructor';
-  enrolledCourseIds: number[];
+  enrolledCourseIds: number[];      // IDs of courses (still numeric — matches mock data for now)
 }
 
 export interface ChatMessage {
@@ -47,19 +47,19 @@ export interface Module {
 }
 
 export interface Review {
-    id: number;
-    author: string;
-    avatarUrl: string;
-    rating: number;
-    comment: string;
+  id: number;
+  author: string;
+  avatarUrl: string;
+  rating: number;
+  comment: string;
 }
 
 export interface Webinar {
-    id: number;
-    title: string;
-    date: string;
-    status: 'live' | 'upcoming' | 'ended';
-    joinUrl?: string;
+  id: number;
+  title: string;
+  date: string;
+  status: 'live' | 'upcoming' | 'ended';
+  joinUrl?: string;
 }
 
 export interface Course {
@@ -90,34 +90,34 @@ export interface Course {
 }
 
 export interface CourseWithEnrollment extends Course {
-    isEnrolled: boolean;
+  isEnrolled: boolean;
 }
 
 export interface Achievement {
-    id: number;
-    title: string;
-    description: string;
-    icon: React.ReactNode;
+  id: number;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
 }
 
 export interface CommunityMessage {
-    id: number;
-    text: string;
-    author: string;
-    avatarUrl: string;
-    timestamp: string;
-    isCurrentUser: boolean;
+  id: number;
+  text: string;
+  author: string;
+  avatarUrl: string;
+  timestamp: string;
+  isCurrentUser: boolean;
 }
 
 export interface CommunityTopic {
-    id: number;
-    title: string;
-    messages: CommunityMessage[];
+  id: number;
+  title: string;
+  messages: CommunityMessage[];
 }
 
 export interface AuditLog {
   id: number;
-  userId: number;
+  userId: string;               
   userName: string;
   action: string;
   details: string;
@@ -126,27 +126,27 @@ export interface AuditLog {
 }
 
 export interface PayoutRequest {
-    id: number;
-    instructorId: number;
-    amount: number;
-    accountName: string;
-    accountNumber: string;
-    bankName: string;
-    status: 'pending' | 'approved' | 'rejected';
-    timestamp: string;
+  id: number;
+  instructorId: string;            
+  amount: number;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  timestamp: string;
 }
 
 export interface InstructorMessage {
-    id: number;
-    instructorId: number;
-    studentId: number;
-    text: string;
-    timestamp: string;
+  id: number;
+  instructorId: string;            
+  studentId: string;            
+  text: string;
+  timestamp: string;
 }
 
-// FIX: Add this to handle PaystackPop on window, resolving the error in PaystackButton.tsx.
+
 declare global {
-    interface Window {
-        PaystackPop?: any;
-    }
+  interface Window {
+    PaystackPop?: any;
+  }
 }

@@ -4,7 +4,7 @@ import { Icon } from './components/Icon';
 
 export const mockUsers: User[] = [
     {
-        id: 1,
+        id: "user-1",
         name: 'Alex Morgan',
         email: 'alex.morgan@cortouch.io',
         avatarUrl: 'https://picsum.photos/seed/user-avatar/100/100',
@@ -12,7 +12,7 @@ export const mockUsers: User[] = [
         enrolledCourseIds: [1, 2, 4],
     },
     {
-        id: 2,
+        id: "user-2",
         name: 'Jane Doe',
         email: 'jane.doe@example.com',
         avatarUrl: 'https://picsum.photos/seed/user2/100/100',
@@ -20,7 +20,7 @@ export const mockUsers: User[] = [
         enrolledCourseIds: [1, 3],
     },
     {
-        id: 4,
+        id: "user-4",
         name: 'John Smith',
         email: 'john.smith@example.com',
         avatarUrl: 'https://picsum.photos/seed/user4/100/100',
@@ -28,7 +28,7 @@ export const mockUsers: User[] = [
         enrolledCourseIds: [1],
     },
     {
-        id: 5,
+        id: "user-5",
         name: 'Sarah Wilson',
         email: 'sarah.wilson@example.com',
         avatarUrl: 'https://picsum.photos/seed/user5/100/100',
@@ -36,7 +36,7 @@ export const mockUsers: User[] = [
         enrolledCourseIds: [1, 2],
     },
     {
-        id: 3,
+        id: "user-3",
         name: 'David Miller',
         email: 'david.miller@cortouch.io',
         avatarUrl: 'https://picsum.photos/seed/instructor1/100/100',
