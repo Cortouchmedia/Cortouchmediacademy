@@ -143,7 +143,7 @@ export class AuthController {
       }
     }
 
-    const supabase = this.supabaseService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
