@@ -61,14 +61,14 @@ export class AssetsService {
     }
 
     // Generate unique public ID
-    const publicId = `${uploadDto.entity_type}/${uploadDto.entity_id}/${uploadDto.type}/${uuidv4()}`;
+    const publicId = uuidv4();
 
     try {
       // Upload to Cloudinary
       const uploadResult = await this.cloudinaryService.uploadImage(
         file.buffer,
         {
-          folder: `assets/${uploadDto.entity_type}s/${uploadDto.type}`,
+          folder: `assets/${uploadDto.entity_type}s/${uploadDto.entity_id}/${uploadDto.type}`,
           public_id: publicId,
           transformation: [
             { width: 800, height: 600, crop: "limit", quality: "auto" },
@@ -77,31 +77,30 @@ export class AssetsService {
         },
       );
 
-      // Generate different size variants
       const variants = {
         original: uploadResult.secure_url,
-        large: this.cloudinaryService.generateImageUrl(publicId, {
+        large: this.cloudinaryService.generateImageUrl(uploadResult.public_id, {
           width: 800,
           height: 600,
           crop: "limit",
         }),
-        medium: this.cloudinaryService.generateImageUrl(publicId, {
+        medium: this.cloudinaryService.generateImageUrl(uploadResult.public_id, {
           width: 400,
           height: 300,
           crop: "limit",
         }),
-        small: this.cloudinaryService.generateImageUrl(publicId, {
+        small: this.cloudinaryService.generateImageUrl(uploadResult.public_id, {
           width: 200,
           height: 150,
           crop: "limit",
         }),
-        thumbnail: this.cloudinaryService.generateImageUrl(publicId, {
+        thumbnail: this.cloudinaryService.generateImageUrl(uploadResult.public_id, {
           width: 100,
           height: 100,
           crop: "thumb",
         }),
       };
-
+      
       // Save to database
       const { data: asset, error } = await supabase
         .from("assets")
