@@ -11,18 +11,6 @@ export class AppService {
     return 'Hello from NestJS Backend!';
   }
 
-  async getCourses() {
-    const supabase = this.supabaseService.getAdminClient();
-
-    const { data, error } = await supabase.from('courses').select('*');
-
-    if (error) {
-      this.logger.error(`Error fetching courses: ${error.message}`);
-      return [];
-    }
-
-    return data;
-  }
 
   async signup(
     full_name: string,
