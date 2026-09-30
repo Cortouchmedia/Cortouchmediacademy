@@ -51,11 +51,7 @@ export class CoursesService {
       .select(
         `
         *,
-        instructor:instructor_id(id, full_name, email),
-        content:course_modules(
-          *,
-          lessons:course_lessons(*)
-        )
+        instructor:instructor_id(id, full_name, email)
       `,
       )
       .eq("status", "PUBLISHED");
@@ -70,7 +66,7 @@ export class CoursesService {
       query = query.ilike("title", `%${filters.search}%`);
     }
   
-    const { data, error } = await query.order("created_at", {
+    const { data: courses, error } = await query.order("created_at", {
       ascending: false,
     });
   
@@ -81,7 +77,43 @@ export class CoursesService {
       );
     }
   
-    return data || [];
+    if (!courses || courses.length === 0) return [];
+  
+    const courseIds = courses.map((c: any) => c.id);
+  
+
+    const { data: modules, error: modulesError } = await supabase
+      .from("course_modules")
+      .select(
+        `
+        *,
+        lessons:course_lessons(*)
+      `,
+      )
+      .in("course_id", courseIds)
+      .order("order_number", { ascending: true });
+  
+    if (modulesError) {
+      this.logger.error(`Failed to fetch modules: ${modulesError.message}`);
+      throw new BadRequestException(
+        `Failed to fetch modules: ${modulesError.message}`,
+      );
+    }
+  
+
+    const modulesByCourse = new Map<string, any[]>();
+    (modules || []).forEach((m: any) => {
+      if (!modulesByCourse.has(m.course_id)) {
+        modulesByCourse.set(m.course_id, []);
+      }
+      modulesByCourse.get(m.course_id)!.push(m);
+    });
+  
+
+    return courses.map((c: any) => ({
+      ...c,
+      content: modulesByCourse.get(c.id) ?? [],
+    }));
   }
 
   async getCourseById(courseId: string) {
