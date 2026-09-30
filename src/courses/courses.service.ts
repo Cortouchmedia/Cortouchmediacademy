@@ -765,12 +765,22 @@ export class CoursesService {
 
     const courseId = module.course_id;
 
-    // Get all lessons for this course
+  
+    const { data: courseModules } = await supabase
+      .from("course_modules")
+      .select("id")
+      .eq("course_id", courseId);
+    
+    if (!courseModules || courseModules.length === 0) return;
+    
+    const moduleIds = courseModules.map((m) => m.id);
+    
+ 
     const { data: allLessons } = await supabase
       .from("course_lessons")
       .select("id")
-      .eq("module.course_id", courseId);
-
+      .in("module_id", moduleIds);
+    
     if (!allLessons || allLessons.length === 0) return;
 
     // Get completed lessons
