@@ -788,17 +788,75 @@ export class CoursesService {
     const completedCount = completedLessons?.length || 0;
     const progressPercentage = (completedCount / totalLessons) * 100;
 
-    // Update enrollment progress
-    await supabase
-      .from("course_enrollments")
-      .update({
-        progress_percentage: progressPercentage,
-        completed_at: progressPercentage === 100 ? new Date() : null,
-        last_accessed_at: new Date(),
-      })
-      .eq("user_id", userId)
-      .eq("course_id", courseId);
-  }
+       // Update enrollment progress
+       await supabase
+       .from("course_enrollments")
+       .update({
+         progress_percentage: progressPercentage,
+         completed_at: progressPercentage === 100 ? new Date() : null,
+         last_accessed_at: new Date(),
+       })
+       .eq("user_id", userId)
+       .eq("course_id", courseId);
+ 
+     // Auto-issue a certificate the moment the course hits 100%
+     if (progressPercentage === 100) {
+       try {
+         const { data: existingCert } = await supabase
+           .from("certificates")
+           .select("id")
+           .eq("user_id", userId)
+           .eq("course_id", courseId)
+           .maybeSingle();
+ 
+         if (!existingCert) {
+           const seed = userId + courseId;
+           const certificateNumber = `CERT-${new Date().getFullYear()}-${this.generateCertificateHash(seed).substring(0, 6)}`;
+           const verificationCode = this.generateCertificateHash(
+             seed + Date.now(),
+           )
+             .substring(0, 8)
+             .toUpperCase();
+ 
+           const { error: certError } = await supabase
+             .from("certificates")
+             .insert({
+               user_id: userId,
+               course_id: courseId,
+               certificate_number: certificateNumber,
+               issue_date: new Date(),
+               verification_code: verificationCode,
+               completed_at: new Date(),
+               metadata: { grade: "PASS", generated_by: "auto" },
+             });
+ 
+           if (certError) {
+             this.logger.error(
+               `Certificate insert failed: ${certError.message}`,
+             );
+           } else {
+             this.logger.log(
+               `Certificate issued to ${userId} for course ${courseId}`,
+             );
+           }
+         }
+       } catch (err) {
+         this.logger.error(
+           `Auto-issue certificate crashed: ${err instanceof Error ? err.message : err}`,
+         );
+       }
+     }
+   }
+ 
+   private generateCertificateHash(input: string): string {
+     let hash = 0;
+     for (let i = 0; i < input.length; i++) {
+       const char = input.charCodeAt(i);
+       hash = (hash << 5) - hash + char;
+       hash = hash & hash;
+     }
+     return Math.abs(hash).toString(16);
+   }
 
   // ==================== REVIEWS ====================
 
