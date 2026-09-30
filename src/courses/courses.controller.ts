@@ -164,6 +164,17 @@ export class CoursesController {
     return this.coursesService.getCourseProgress(userId, courseId);
   }
 
+  @Get("instructor/:instructorId/recent-enrollments")
+  async getRecentEnrollments(
+    @Param("instructorId") instructorId: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.coursesService.getRecentEnrollments(
+      instructorId,
+      limit ? Number(limit) : 5,
+    );
+  }
+
   @Patch("progress")
   async updateProgress(
     @Body() progressDto: LessonProgressDto,

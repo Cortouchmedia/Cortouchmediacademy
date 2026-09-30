@@ -887,4 +887,77 @@ export class CoursesService {
       distribution,
     };
   }
+
+  // ==================== DASHBOARD / ACTIVITY ====================
+
+  async getRecentEnrollments(instructorId: string, limit = 5) {
+    const supabase = this.supabaseService.getAdminClient();
+
+  
+    const { data: courses, error: coursesError } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("instructor_id", instructorId);
+
+    if (coursesError) {
+      this.logger.error(`Failed to fetch instructor courses: ${coursesError.message}`);
+      throw new BadRequestException(
+        `Failed to fetch instructor courses: ${coursesError.message}`,
+      );
+    }
+
+    if (!courses || courses.length === 0) return [];
+    const courseIds = courses.map((c) => c.id);
+
+   
+    const { data: enrollments, error: enrollError } = await supabase
+      .from("course_enrollments")
+      .select(
+        `
+        id,
+        user_id,
+        course_id,
+        enrollment_date
+      `,
+      )
+      .in("course_id", courseIds)
+      .order("enrollment_date", { ascending: false })
+      .limit(limit);
+
+    if (enrollError) {
+      this.logger.error(`Failed to fetch enrollments: ${enrollError.message}`);
+      throw new BadRequestException(
+        `Failed to fetch enrollments: ${enrollError.message}`,
+      );
+    }
+
+    if (!enrollments || enrollments.length === 0) return [];
+
+   
+    const userIds = [...new Set(enrollments.map((e) => e.user_id))];
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, avatar_url")
+      .in("id", userIds);
+
+    const { data: courseDetails } = await supabase
+      .from("courses")
+      .select("id, title")
+      .in("id", courseIds);
+
+    const profileById = new Map((profiles || []).map((p) => [p.id, p]));
+    const courseById = new Map((courseDetails || []).map((c) => [c.id, c]));
+
+
+    return enrollments.map((e) => ({
+      id: e.id,
+      user_id: e.user_id,
+      course_id: e.course_id,
+      enrollment_date: e.enrollment_date,
+      user: profileById.get(e.user_id) ?? null,
+      course: courseById.get(e.course_id) ?? null,
+    }));
+  }
+
 }
