@@ -5,13 +5,17 @@ import "./globals.css";
 import { AppProvider } from "../context/AppContext";
 import { AppLayout } from "../components/AppLayout";
 
-
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
   title: "Cortouch Media Academy",
   description: "A modern, interactive e-learning application for Cortouch Media Academy.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -22,7 +26,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${playfair.variable} font-sans`}>
-        
         <AppProvider>
           <AppLayout>{children}</AppLayout>
         </AppProvider>
