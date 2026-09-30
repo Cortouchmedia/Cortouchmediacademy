@@ -1,4 +1,3 @@
-// src/courses/courses.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -46,17 +45,21 @@ export class CoursesService {
     search?: string;
   }) {
     const supabase = this.supabaseService.getAdminClient();
-
+  
     let query = supabase
       .from("courses")
       .select(
         `
         *,
-        instructor:instructor_id(id, full_name, email)
+        instructor:instructor_id(id, full_name, email),
+        content:course_modules(
+          *,
+          lessons:course_lessons(*)
+        )
       `,
       )
       .eq("status", "PUBLISHED");
-
+  
     if (filters?.category) {
       query = query.eq("category", filters.category);
     }
@@ -66,18 +69,18 @@ export class CoursesService {
     if (filters?.search) {
       query = query.ilike("title", `%${filters.search}%`);
     }
-
+  
     const { data, error } = await query.order("created_at", {
       ascending: false,
     });
-
+  
     if (error) {
       this.logger.error(`Failed to fetch courses: ${error.message}`);
       throw new BadRequestException(
         `Failed to fetch courses: ${error.message}`,
       );
     }
-
+  
     return data || [];
   }
 
