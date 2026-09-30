@@ -10,7 +10,7 @@ interface AdminProps {
     courses: Course[];
     onAddNewCourse: (courseData: { title: string; category: string; instructor: string; duration: string; description: string; imageUrl: string; price: number; prerequisiteCourseIds: number[] }) => void;
     onSelectCourseToEdit: (course: Course) => void;
-    onDeleteCourse: (courseId: number) => void;
+    onDeleteCourse: (courseId: number | string) => void;
 }
 
 const initialFormState = {
@@ -59,7 +59,9 @@ export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, on
     };
 
     const getEnrolledCoursesForUser = (user: User) => {
-        return courses.filter(course => user.enrolledCourseIds.includes(course.id));
+        return courses.filter((course) =>
+          user.enrolledCourseIds.some((id) => String(id) === String(course.id)),
+        );
     };
 
     return (

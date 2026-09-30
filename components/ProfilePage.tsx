@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { User } from '../types';
+import type { User, Course } from '../types';
 import { Icon } from './Icon';
 import { motion } from 'framer-motion';
 import { Api, ApiError, authStorage } from '@/lib/api';
 
 interface ProfilePageProps {
   user: User;
+  courses?: Course[];
 }
 
 interface ProfileData {
@@ -18,7 +19,7 @@ interface ProfileData {
   website: string;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({ user, courses = [] }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
     website: 'https://example.com',
   });
 
-  // Load real profile on mount (if user has a token)
+  // Load real profile on mount
   useEffect(() => {
     const token = authStorage.getToken();
     if (!token) return;
@@ -56,7 +57,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
         }));
       })
       .catch(() => {
-        /* silent — user may not have logged in via API */
+        /* silent */
       });
   }, []);
 
@@ -75,10 +76,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
     try {
       await Api.auth.updateUser(
         String(user.id),
-        {
-          full_name: formData.full_name.trim(),
-          // role intentionally omitted — client can't escalate own role
-        },
+        { full_name: formData.full_name.trim() },
         token,
       );
 
@@ -96,6 +94,42 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
   };
 
   const isAdmin = user.role === 'admin';
+
+  // ============ Real stats ============
+  const myCourses = courses.filter(
+    (c) =>
+      String(c.instructor_id) === String(user.id) ||
+      c.instructor === user.name,
+  );
+
+  const totalStudents = myCourses.reduce(
+    (sum, c) => sum + ((c as any).enrollmentCount ?? 0),
+    0,
+  );
+
+  const avgRating =
+    myCourses.length > 0
+      ? myCourses.reduce((sum, c) => sum + ((c as any).rating ?? 0), 0) /
+        myCourses.length
+      : 0;
+
+  const enrolledCount = user.enrolledCourseIds?.length ?? 0;
+
+  const accountStats: { label: string; value: string }[] = isAdmin
+    ? [
+        { label: 'System Access', value: 'Unlimited' },
+        { label: 'Admin Level', value: 'Super Admin' },
+      ]
+    : user.role === 'instructor'
+      ? [
+          { label: 'Courses', value: `${myCourses.length} Published` },
+          { label: 'Total Students', value: totalStudents.toLocaleString() },
+          { label: 'Avg. Rating', value: avgRating.toFixed(1) },
+        ]
+      : [
+          { label: 'Courses', value: `${enrolledCount} Enrolled` },
+          { label: 'Certificates', value: '0 Earned' },
+        ];
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -370,52 +404,14 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
                   {isAdmin ? 'Admin Stats' : 'Account Stats'}
                 </h3>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm">Joined</span>
-                    <span className="text-gray-900 font-semibold text-sm">
-                      March 2024
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 text-sm">
-                      {isAdmin ? 'System Access' : 'Courses'}
-                    </span>
-                    <span className="text-gray-900 font-semibold text-sm">
-                      {isAdmin
-                        ? 'Unlimited'
-                        : user.role === 'instructor'
-                          ? '12 Published'
-                          : `${user.enrolledCourseIds?.length ?? 0} Enrolled`}
-                    </span>
-                  </div>
-                  {user.role === 'student' && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 text-sm">
-                        Certificates
-                      </span>
+                  {accountStats.map((s, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">{s.label}</span>
                       <span className="text-gray-900 font-semibold text-sm">
-                        4 Earned
+                        {s.value}
                       </span>
                     </div>
-                  )}
-                  {user.role === 'instructor' && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 text-sm">
-                        Total Students
-                      </span>
-                      <span className="text-gray-900 font-semibold text-sm">
-                        1,240
-                      </span>
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600 text-sm">Admin Level</span>
-                      <span className="text-gray-900 font-semibold text-sm">
-                        Super Admin
-                      </span>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
 

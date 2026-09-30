@@ -23,7 +23,9 @@ export default function AdminUsersPage() {
   if (!currentUser || currentUser.role !== 'admin') return null;
 
   const getEnrolledCoursesForUser = (user: User) => {
-    return courses.filter(course => user.enrolledCourseIds.includes(course.id));
+    return courses.filter(course =>
+      user.enrolledCourseIds.some((id) => String(id) === String(course.id)),
+    );
   };
 
   const handleEditClick = (user: User) => {

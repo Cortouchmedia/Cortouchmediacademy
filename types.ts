@@ -3,12 +3,12 @@ import React from 'react';
 export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students' | 'Profile' | 'Audit Log';
 
 export interface User {
-  id: string;                       // ✅ UUID from Supabase auth
+  id: string;
   name: string;
   email: string;
   avatarUrl: string;
   role: 'student' | 'admin' | 'instructor';
-  enrolledCourseIds: number[];      // IDs of courses (still numeric — matches mock data for now)
+  enrolledCourseIds: number[];
 }
 
 export interface ChatMessage {
@@ -30,7 +30,7 @@ export interface Project {
 }
 
 export interface Lesson {
-  id: number;
+  id: number | string;              // ⬅️ CHANGED
   title: string;
   duration: string;
   type: 'video' | 'text';
@@ -40,7 +40,7 @@ export interface Lesson {
 }
 
 export interface Module {
-  id: number;
+  id: number | string;              // ⬅️ CHANGED
   title: string;
   lessons: Lesson[];
   progress: number;
@@ -63,10 +63,11 @@ export interface Webinar {
 }
 
 export interface Course {
-  id: number;
+  id: number | string;              // ⬅️ CHANGED
   title: string;
   category: string;
   instructor: string;
+  instructor_id?: string;           // ⬅️ ADDED
   duration: string;
   description: string;
   imageUrl: string;
@@ -117,7 +118,7 @@ export interface CommunityTopic {
 
 export interface AuditLog {
   id: number;
-  userId: string;               
+  userId: string;
   userName: string;
   action: string;
   details: string;
@@ -127,7 +128,7 @@ export interface AuditLog {
 
 export interface PayoutRequest {
   id: number;
-  instructorId: string;            
+  instructorId: string;
   amount: number;
   accountName: string;
   accountNumber: string;
@@ -138,12 +139,11 @@ export interface PayoutRequest {
 
 export interface InstructorMessage {
   id: number;
-  instructorId: string;            
-  studentId: string;            
+  instructorId: string;
+  studentId: string;
   text: string;
   timestamp: string;
 }
-
 
 declare global {
   interface Window {

@@ -34,14 +34,16 @@ export default function AdminCoursesPage() {
     <Admin 
       users={users} 
       courses={courses} 
-      onAddNewCourse={(data) => handleInstructorCourseAdd({
-        ...data,
-        modules: 0,
-        whatYouWillLearn: [],
-        requirements: [],
-        instructorBio: 'Expert instructor at Cortouch Academy.',
-        features: ['Hands-on projects', 'Certificate of completion']
-      })} 
+      onAddNewCourse={async (data) => {
+        await handleInstructorCourseAdd({
+          ...data,
+          modules: 0,
+          whatYouWillLearn: [],
+          requirements: [],
+          instructorBio: 'Expert instructor at Cortouch Academy.',
+          features: ['Hands-on projects', 'Certificate of completion'],
+        });
+      }}
       onSelectCourseToEdit={(course) => setEditingCourse(course)} 
       onDeleteCourse={handleCourseDelete} 
     />

@@ -274,20 +274,21 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   const [showFilters, setShowFilters] = useState(false);
   const coursesPerPage = 12;
 
-  // Generate demo courses
   const allCourses = useMemo(() => {
-    let courses = generateDemoCourses();
+   
+    const source = initialCourses && initialCourses.length > 0
+      ? initialCourses
+      : generateDemoCourses();
 
-    // Update enrollment status based on user
     if (user && user.enrolledCourseIds && user.enrolledCourseIds.length > 0) {
-      courses = courses.map(course => ({
+      return source.map((course) => ({
         ...course,
-        isEnrolled: user.enrolledCourseIds.includes(course.id)
+        isEnrolled: user.enrolledCourseIds.includes(course.id as any),
       }));
     }
-
-    return courses;
-  }, [user]);
+  
+    return source;
+  }, [user, initialCourses]);   
 
   const categories = useMemo(() => {
     const uniqueCategories = ["All", ...new Set(allCourses.map(course => course.category))];

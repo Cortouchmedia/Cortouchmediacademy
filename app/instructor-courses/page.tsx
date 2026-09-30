@@ -5,6 +5,7 @@ import { useAppContext } from '../../context/AppContext';
 import { useRouter } from 'next/navigation';
 import { Icon } from '../../components/Icon';
 import { EditCourse } from '../../components/EditCourse';
+import { PreviewCourse } from '../../components/PreviewCourse';
 
 export default function InstructorCoursesPage() {
   const { 
@@ -13,6 +14,8 @@ export default function InstructorCoursesPage() {
     handleLessonAdd, handleLessonDelete, handleWebinarAdd, handleWebinarDelete
   } = useAppContext();
   const router = useRouter();
+
+  // ⬇️ ALL hooks must be BEFORE any return statement
   const [isAddingCourse, setIsAddingCourse] = useState(false);
   const [newCourse, setNewCourse] = useState({
     title: '',
@@ -23,26 +26,45 @@ export default function InstructorCoursesPage() {
     duration: '',
   });
   const [initialModules, setInitialModules] = useState([{ title: '' }]);
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewingCourse, setPreviewingCourse] = useState<any>(null);
+  // ⬇️ NOW it's safe to return early
   if (!currentUser || currentUser.role !== 'instructor') return null;
 
-  if (editingCourse) {
+if (editingCourse) {
+  return (
+    <EditCourse
+      course={editingCourse}
+      allCourses={courses}
+      onUpdateCourse={handleCourseUpdate}
+      onAddModule={handleModuleAdd}
+      onAddLesson={handleLessonAdd}
+      onDeleteLesson={handleLessonDelete}
+      onAddWebinar={handleWebinarAdd}
+      onDeleteWebinar={handleWebinarDelete}
+      onBack={() => setEditingCourse(null)}
+    />
+  );
+}
+
+if (previewingCourse) {
     return (
-      <EditCourse
-        course={editingCourse}
-        allCourses={courses}
-        onUpdateCourse={handleCourseUpdate}
-        onAddModule={handleModuleAdd}
-        onAddLesson={handleLessonAdd}
-        onDeleteLesson={handleLessonDelete}
-        onAddWebinar={handleWebinarAdd}
-        onDeleteWebinar={handleWebinarDelete}
-        onBack={() => setEditingCourse(null)}
+      <PreviewCourse
+        course={previewingCourse}
+        onBack={() => setPreviewingCourse(null)}
+        onEdit={() => {
+          const c = previewingCourse;
+          setPreviewingCourse(null);
+          setEditingCourse(c);
+        }}
       />
     );
   }
 
-  const instructorCourses = courses.filter(c => c.instructor === currentUser.name);
+  const instructorCourses = courses.filter(
+    (c: any) => c.instructor_id === currentUser.id || c.instructor === currentUser.name,
+  );
 
   const addModuleField = () => setInitialModules([...initialModules, { title: '' }]);
   const removeModuleField = (index: number) => {
@@ -56,23 +78,37 @@ export default function InstructorCoursesPage() {
     setInitialModules(updated);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const modulesToAdd = initialModules.filter(m => m.title.trim() !== '');
-    handleInstructorCourseAdd({
-      ...newCourse,
-      instructor: currentUser.name,
-      instructorBio: 'Expert instructor at Cortouch Academy.',
-      whatYouWillLearn: [],
-      requirements: [],
-      features: ['Hands-on projects', 'Certificate of completion'],
-      modules: modulesToAdd.length,
-    }, modulesToAdd);
-    setIsAddingCourse(false);
-    setNewCourse({ title: '', category: '', description: '', imageUrl: '', price: 0, duration: '' });
-    setInitialModules([{ title: '' }]);
+    setError(null);
+    setIsSubmitting(true);
+    const modulesToAdd = initialModules.filter((m) => m.title.trim() !== '');
+  
+    try {
+      await handleInstructorCourseAdd(
+        {
+          ...newCourse,
+          instructor: currentUser.name,
+          instructorBio: 'Expert instructor at Cortouch Academy.',
+          whatYouWillLearn: [],
+          requirements: [],
+          features: ['Hands-on projects', 'Certificate of completion'],
+          modules: modulesToAdd.length,
+        },
+        modulesToAdd,
+      );
+  
+      // Only close + reset on success
+      setIsAddingCourse(false);
+      setNewCourse({ title: '', category: '', description: '', imageUrl: '', price: 0, duration: '' });
+      setInitialModules([{ title: '' }]);
+    } catch (err) {
+      console.error('Course create failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create course');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -117,15 +153,14 @@ export default function InstructorCoursesPage() {
                   Edit
                 </button>
                 <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCourseSelect(course);
-                    router.push(`/course/${course.id}`);
-                  }}
-                  className="flex-1 py-2 bg-[#219BD5] text-white font-bold rounded-lg hover:bg-[#1a7fb0] transition-all"
-                >
-                  View
-                </button>
+  onClick={(e) => {
+    e.stopPropagation();
+    setPreviewingCourse(course);
+  }}
+  className="flex-1 py-2 bg-[#219BD5] text-white font-bold rounded-lg hover:bg-[#1a7fb0] transition-all"
+>
+  View
+</button>
               </div>
             </div>
           </div>
@@ -262,10 +297,29 @@ export default function InstructorCoursesPage() {
                 <p className="text-xs text-gray-500 italic">You can add lessons to these modules after creating the course by clicking "Edit".</p>
               </div>
 
-              <div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsAddingCourse(false)} className="flex-1 py-3 bg-gray-100 text-gray-900 font-bold rounded-xl hover:bg-gray-200 transition-all">Cancel</button>
-                <button type="submit" className="flex-1 py-3 bg-[#219BD5] text-white font-bold rounded-xl hover:bg-[#1a7fb0] transition-all">Create Course</button>
-              </div>
+              {error && (
+  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+    {error}
+  </div>
+)}
+
+<div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-gray-100">
+  <button
+    type="button"
+    onClick={() => setIsAddingCourse(false)}
+    disabled={isSubmitting}
+    className="flex-1 py-3 bg-gray-100 text-gray-900 font-bold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
+  >
+    Cancel
+  </button>
+  <button
+    type="submit"
+    disabled={isSubmitting}
+    className="flex-1 py-3 bg-[#219BD5] text-white font-bold rounded-xl hover:bg-[#1a7fb0] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    {isSubmitting ? 'Creating…' : 'Create Course'}
+  </button>
+</div>
             </form>
           </div>
         </div>

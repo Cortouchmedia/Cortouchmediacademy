@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 
 interface InstructorAssistantProps {
     course: Course;
-    onSendMessage: (courseId: number, text: string) => void;
+    onSendMessage: (courseId: number | string, text: string) => void;
 }
 
 const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
@@ -79,10 +79,9 @@ export const InstructorAssistant: React.FC<InstructorAssistantProps> = ({ course
         scrollToBottom();
     }, [localChatHistory, course.isAssistantTyping]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (inputValue.trim()) {
-            // Add user message immediately for better UX
             const userMessage: ChatMessage = {
                 id: Date.now(),
                 text: inputValue,
@@ -90,10 +89,12 @@ export const InstructorAssistant: React.FC<InstructorAssistantProps> = ({ course
                 timestamp: new Date().toLocaleTimeString(),
             };
             setLocalChatHistory(prev => [...prev, userMessage]);
-            onSendMessage(course.id, inputValue);
             setInputValue('');
-            
-            // Keep focus
+            try {
+                await onSendMessage(course.id, inputValue);
+            } catch (err) {
+                console.error('Message send failed:', err);
+            }
             setTimeout(() => {
                 inputRef.current?.focus();
             }, 100);

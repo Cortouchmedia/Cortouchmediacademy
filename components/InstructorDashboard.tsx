@@ -1,8 +1,9 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './Icon';
 import type { Page, Course, User } from '../types';
+import { Api, authStorage } from '../lib/api';
 
 interface InstructorDashboardProps {
   user: User;
@@ -11,11 +12,48 @@ interface InstructorDashboardProps {
   onCourseSelect: (course: Course) => void;
 }
 
+function formatRelativeTime(dateStr: string): string {
+  if (!dateStr) return '';
+  const then = new Date(dateStr).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, now - then);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, courses, setActivePage, onCourseSelect }) => {
   const instructorCourses = courses.filter(c => c.instructor === user.name);
   const totalRevenue = instructorCourses.reduce((acc, c) => acc + (c.enrollmentCount * c.price), 0);
   const instructorShare = totalRevenue * 0.3;
-  
+
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+
+  useEffect(() => {
+    const token = authStorage.getToken();
+    if (!token || !user?.id) {
+      setLoadingActivity(false);
+      return;
+    }
+
+    Api.courses
+      .recentEnrollments(user.id, 5)
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : data?.data ?? [];
+        setRecentActivity(list);
+      })
+      .catch((err) => {
+        console.error('Failed to load recent activity:', err);
+        setRecentActivity([]);
+      })
+      .finally(() => setLoadingActivity(false));
+  }, [user?.id]);
+
   const stats = [
     { label: 'Total Students', value: instructorCourses.reduce((acc, c) => acc + c.enrollmentCount, 0).toLocaleString(), icon: 'community', color: 'text-blue-600', bg: 'bg-blue-100', page: 'Instructor Students' as Page },
     { label: 'Total Courses', value: instructorCourses.length, icon: 'academicCap', color: 'text-purple-600', bg: 'bg-purple-100', page: 'Instructor Courses' as Page },
@@ -91,19 +129,37 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-6">
             <h2 className="text-lg lg:text-xl font-bold text-gray-900 mb-4 lg:mb-6">Recent Student Activity</h2>
             <div className="space-y-4 lg:space-y-6">
-              {[1, 2, 3, 4].map((_, i) => (
-                <div 
-                  key={i} 
-                  className="flex gap-3 lg:gap-4 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded-lg transition-colors"
-                  onClick={() => setActivePage('Instructor Students')}
-                >
-                  <img src={`https://i.pravatar.cc/150?u=${i}`} alt="Student" className="w-8 h-8 lg:w-10 lg:h-10 rounded-full" />
-                  <div>
-                    <p className="text-xs lg:text-sm text-gray-900"><span className="font-bold">Student {i+1}</span> enrolled in <span className="font-bold">Course Name</span></p>
-                    <p className="text-[10px] lg:text-xs text-gray-500 mt-1">2 hours ago</p>
-                  </div>
-                </div>
-              ))}
+              {loadingActivity ? (
+                <p className="text-sm text-gray-500">Loading…</p>
+              ) : recentActivity.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">
+                  No recent activity yet. When students enroll in your courses, they'll appear here.
+                </p>
+              ) : (
+                recentActivity.map((item: any) => {
+                  const studentName = item.user?.full_name ?? item.user?.email ?? 'A student';
+                  const courseTitle = item.course?.title ?? 'your course';
+                  const when = formatRelativeTime(item.enrollment_date);
+                  const avatar = item.user?.avatar_url || `https://i.pravatar.cc/150?u=${item.user_id || item.id}`;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex gap-3 lg:gap-4 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded-lg transition-colors"
+                      onClick={() => setActivePage('Instructor Students')}
+                    >
+                      <img src={avatar} alt={studentName} className="w-8 h-8 lg:w-10 lg:h-10 rounded-full object-cover" />
+                      <div>
+                        <p className="text-xs lg:text-sm text-gray-900">
+                          <span className="font-bold">{studentName}</span> enrolled in{' '}
+                          <span className="font-bold">{courseTitle}</span>
+                        </p>
+                        <p className="text-[10px] lg:text-xs text-gray-500 mt-1">{when}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
           

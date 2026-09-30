@@ -1,10 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import type { Page, Course, User, ChatMessage, CourseWithEnrollment, AuditLog, PayoutRequest, InstructorMessage, Lesson, Webinar } from '../types';
-import { Api, authStorage } from '../lib/api';
-import { mockUsers, mockCourses } from '../constants';
+import { Api, authStorage, api } from '../lib/api';
 
 interface AppContextType {
   isLoggedIn: boolean;
@@ -38,38 +37,50 @@ interface AppContextType {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setSearchQuery: (query: string) => void;
   setLanguage: (lang: 'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig') => void;
-  handleLogin: (
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
+  handleLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   handleLogout: () => void;
   handleNavigate: (page: Page) => void;
   handleCourseSelect: (course: Course) => void;
   handleSearchChange: (query: string) => void;
   handleUserUpdate: (updatedUser: User) => void;
-  handleUserDelete: (userId: string) => void;  
+  handleUserDelete: (userId: string) => void;
   handleUserAdd: (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => void;
-  handleEnrollmentSuccess: (courseId: number) => void;
-  handleToggleLessonComplete: (courseId: number, lessonId: number) => void;
-  handleProjectSubmit: (courseId: number, projectId: number, submissionLink: string) => Promise<void>;
+  handleEnrollmentSuccess: (courseId: number | string) => Promise<void>;
+  handleToggleLessonComplete: (courseId: number | string, lessonId: number | string) => void;
+  handleLessonProgressToggle: (lessonId: string | number, isCompleted: boolean) => Promise<void>;
+  handleProjectSubmit: (courseId: number | string, projectId: number | string, submissionLink: string) => Promise<void>;
   handleSendMessage: (text: string) => Promise<void>;
-  handleSendCourseMessage: (courseId: number, text: string) => Promise<void>;
+  handleSendCourseMessage: (courseId: number | string, text: string) => Promise<void>;
   logAuditEvent: (action: string, details: string, type: AuditLog['type']) => void;
-  handleInstructorCourseAdd: (courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>, initialModules?: { title: string }[]) => void;
+  handleInstructorCourseAdd: (
+    courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>,
+    initialModules?: { title: string }[],
+  ) => Promise<void>;
   handleInstructorMessageSend: (studentId: string, text: string) => void;
   handlePayoutRequest: (payoutData: Omit<PayoutRequest, 'id' | 'instructorId' | 'status' | 'timestamp'>) => void;
-  handleCourseUpdate: (courseId: number, updatedDetails: Partial<Course>) => void;
-  handleCourseDelete: (courseId: number) => void;
-  handleModuleAdd: (courseId: number, moduleTitle: string) => void;
-  handleLessonAdd: (courseId: number, moduleId: number, lessonData: Omit<Lesson, 'id' | 'isCompleted'>) => void;
-  handleLessonDelete: (courseId: number, lessonId: number) => void;
-  handleWebinarAdd: (courseId: number, webinarData: Omit<Webinar, 'id'>) => void;
-  handleWebinarDelete: (courseId: number, webinarId: number) => void;
+  handleCourseUpdate: (courseId: number | string, updatedDetails: Partial<Course>) => Promise<void>;
+  handleCourseDelete: (courseId: number | string) => Promise<void>;
+  handleModuleAdd: (courseId: number | string, moduleTitle: string) => Promise<{ id: string | number; title: string } | null>;
+  handleLessonAdd: (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+  ) => Promise<void>;
+  handleLessonDelete: (courseId: number | string, lessonId: number | string) => Promise<void>;
+  handleWebinarAdd: (courseId: number | string, webinarData: Omit<Webinar, 'id'>) => void;
+  handleWebinarDelete: (courseId: number | string, webinarId: number | string) => void;
+  handleWebinarRegister: (webinarId: string | number) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const ai = process.env.NEXT_PUBLIC_GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY }) : null;
+const ai = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY })
+  : null;
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -83,18 +94,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isBotTyping, setIsBotTyping] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 1, text: "Hello! I'm your AI assistant. How can I help you with your learning journey today?", sender: 'bot', timestamp: '--:--' }
+    { id: 1, text: "Hello! I'm your AI assistant. How can I help you with your learning journey today?", sender: 'bot', timestamp: '--:--' },
   ]);
   const [searchQuery, setSearchQuery] = useState('');
   const [language, setLanguage] = useState<'en' | 'fr' | 'es' | 'de' | 'yo' | 'ha' | 'ig'>('en');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
   const [instructorMessages, setInstructorMessages] = useState<InstructorMessage[]>([]);
-   
-
   const [isHydrated, setIsHydrated] = useState(false);
-  
-    
+
+  // Rehydrate from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storedUser = localStorage.getItem('auth_user');
@@ -109,9 +118,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('auth_token');
       }
     }
-    setIsHydrated(true);   
+    setIsHydrated(true);
   }, []);
 
+  // Persist currentUser
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (currentUser) {
@@ -119,88 +129,178 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentUser]);
 
+
+  const normalizeCourse = (raw: any): Course => {
+    const safeArray = (v: any): any[] => (Array.isArray(v) ? v : []);
+  
+    return {
+      id: raw.id,
+      title: raw.title ?? '',
+      description: raw.description ?? '',
+      category: raw.category ?? 'General',
+      instructor:
+        raw.instructor?.full_name ??
+        raw.instructor_name ??
+        raw.instructor_id ??
+        'Unknown instructor',
+      instructor_id: raw.instructor_id ?? undefined,
+      duration: raw.duration ?? 'Self-paced',
+      imageUrl: raw.image_url ?? raw.cover_url ?? '',
+      price: Number(raw.price ?? 0) || 0,
+      rating: Number(raw.rating ?? 0) || 0,
+      enrollmentCount: Number(raw.total_rating_count ?? 0) || 0,
+      modules: Array.isArray(raw.modules) ? raw.modules.length : 0,
+      content: (safeArray(raw.content).length > 0 ? safeArray(raw.content) : safeArray(raw.modules)).map((m: any) => ({
+        ...m,
+        lessons: (m.lessons ?? []).map((l: any) => ({
+          ...l,
+          type: l.video_url ? 'video' : 'text',
+          videoUrl: l.video_url ?? l.videoUrl ?? '',
+          content: l.text_content ?? l.content ?? '',
+          duration: l.video_duration ? `${l.video_duration} min` : (l.duration ?? ''),
+          isCompleted: l.isCompleted ?? false,
+        })),
+      })),
+      projects: safeArray(raw.projects),
+      progress: 0,
+      completed: false,
+      reviews: safeArray(raw.reviews),
+      webinars: safeArray(raw.webinars),
+      instructorBio: raw.instructorBio ?? '',
+      whatYouWillLearn: safeArray(raw.whatYouWillLearn),
+      requirements: safeArray(raw.requirements),
+      features: safeArray(raw.features),
+      prerequisiteCourseIds: safeArray(raw.prerequisiteCourseIds),
+    };
+  };
+  // Load courses + apply enrollment progress — sequential, no race
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isLoggedIn || !currentUser?.id) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+      
+        const coursesData: any = await Api.courses.list();
+        const courseList = Array.isArray(coursesData)
+          ? coursesData
+          : coursesData?.data ?? coursesData?.courses ?? [];
+        const normalizedCourses = courseList.map(normalizeCourse);
+
+        
+        const enrollmentsData: any = await Api.courses.userEnrollments(
+          currentUser.id,
+          token,
+        );
+        const enrollList = Array.isArray(enrollmentsData)
+          ? enrollmentsData
+          : enrollmentsData?.data ?? [];
+
+        const enrolledIds = enrollList.map((e: any) => String(e.course_id));
+        const meta: Record<string, { progress: number; completed: boolean }> =
+          {};
+        enrollList.forEach((e: any) => {
+          const cid = String(e.course_id);
+          const pct = Math.round(Number(e.progress_percentage ?? 0));
+          meta[cid] = {
+            progress: pct,
+            completed: pct >= 100 || !!e.completed_at,
+          };
+        });
+
+      
+        const coursesWithProgress = normalizedCourses.map((c: any) => {
+          const m = meta[String(c.id)];
+          return m ? { ...c, progress: m.progress, completed: m.completed } : c;
+        });
+
+        if (cancelled) return;
+
+        setCourses(coursesWithProgress);
+        setCurrentUser((prev) =>
+          prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
+        );
+      } catch (err) {
+        console.error('Failed to load courses/enrollments:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, currentUser?.id]);
+
+
   const logAuditEvent = (action: string, details: string, type: AuditLog['type']) => {
     const newLog: AuditLog = {
-      id: Math.max(...auditLogs.map(l => l.id), 0) + 1,
-      userId: currentUser?.id ?? '',       // ✅ empty string instead of 0
+      id: Math.max(...auditLogs.map((l) => l.id), 0) + 1,
+      userId: currentUser?.id ?? '',
       userName: currentUser?.name || 'System',
       action,
       details,
       timestamp: new Date().toISOString(),
-      type
+      type,
     };
-    setAuditLogs(prev => [newLog, ...prev]);
+    setAuditLogs((prev) => [newLog, ...prev]);
   };
 
-  const handleLogin = async (
-    email: string,
-    password: string,
-  ): Promise<{ success: boolean; error?: string }> => {
+  const refreshCourses = async () => {
     try {
-      // 1. Call backend signin
+      const allCourses: any = await Api.courses.list();
+      const list = Array.isArray(allCourses)
+        ? allCourses
+        : allCourses?.data ?? allCourses?.courses ?? [];
+      const normalized = list.map(normalizeCourse);
+      setCourses(normalized);
+      return normalized;
+    } catch (err) {
+      console.error('Failed to refresh courses:', err);
+      return [];
+    }
+  };
+
+  const handleLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
       const result = await Api.auth.signin({ email, password });
-  
       if (!result?.session?.access_token) {
         return { success: false, error: 'No session returned from server' };
       }
-  
-      // 2. Store the JWT
       authStorage.setToken(result.session.access_token);
-  
-      // 3. Fetch the full user + profile
       const profileData = await Api.auth.profile(result.session.access_token);
-  
-      // 4. Build a proper User object with the REAL UUID
-      const rawRole = (profileData.profile?.role ?? 'STUDENT')
-        .toString()
-        .toLowerCase();
+      const rawRole = (profileData.profile?.role ?? 'STUDENT').toString().toLowerCase();
       const role: User['role'] =
-        rawRole === 'admin' ||
-        rawRole === 'superadmin' ||
-        rawRole === 'instructor' ||
-        rawRole === 'student'
-          ? (rawRole === 'superadmin' ? 'admin' : rawRole)
+        rawRole === 'admin' || rawRole === 'superadmin' || rawRole === 'instructor' || rawRole === 'student'
+          ? ((rawRole === 'superadmin' ? 'admin' : rawRole) as User['role'])
           : 'student';
-  
       const realUser: User = {
-        id: profileData.id,                                        // ✅ UUID string
+        id: profileData.id,
         name: profileData.profile?.full_name ?? profileData.email,
         email: profileData.email,
         avatarUrl: profileData.profile?.avatar_url ?? '',
         role,
-        enrolledCourseIds: [],                                     // TODO: fetch from backend
+        enrolledCourseIds: [],
       };
-  
-      // 5. Update state
       setCurrentUser(realUser);
       setIsLoggedIn(true);
       logAuditEvent('Login', `${realUser.name} logged in as ${realUser.role}`, 'auth');
-  
-    
-          // 6. Route based on role
-          if (role === 'instructor') setCurrentPage('Instructor Dashboard');
-          else if (role === 'admin') setCurrentPage('Admin');
-          else setCurrentPage('Dashboard');
-    
-          // 7. Persist to localStorage so rehydrate finds the user immediately
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_user', JSON.stringify(realUser));
-            console.log('💾 Saved auth_user to localStorage:', realUser.email);
-          }
-    
-          return { success: true };
+      if (role === 'instructor') setCurrentPage('Instructor Dashboard');
+      else if (role === 'admin') setCurrentPage('Admin');
+      else setCurrentPage('Dashboard');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_user', JSON.stringify(realUser));
+      }
+      return { success: true };
     } catch (err: any) {
-      return {
-        success: false,
-        error: err?.message ?? 'Login failed. Please try again.',
-      };
+      return { success: false, error: err?.message ?? 'Login failed. Please try again.' };
     }
   };
 
   const handleLogout = () => {
-    if (currentUser) {
-      logAuditEvent('Logout', `${currentUser.name} logged out`, 'auth');
-    }
+    if (currentUser) logAuditEvent('Logout', `${currentUser.name} logged out`, 'auth');
     setIsLoggedIn(false);
     setCurrentUser(null);
     setCurrentPage('Dashboard');
@@ -214,13 +314,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
     setSelectedCourse(null);
-    setEditingCourse(null);
-    if(completedCourse) setCompletedCourse(null);
+    if (completedCourse) setCompletedCourse(null);
   };
 
-  const handleCourseSelect = (course: Course) => {
-    setSelectedCourse(course);
-  };
+  const handleCourseSelect = (course: Course) => setSelectedCourse(course);
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
@@ -231,135 +328,201 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleUserUpdate = (updatedUser: User) => {
-    if (currentUser && currentUser.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
-    }
+    if (currentUser && currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
     logAuditEvent('User Updated', `Updated user: ${updatedUser.name} (${updatedUser.role})`, 'user');
-    setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
   };
 
   const handleUserDelete = (userId: string) => {
-    const userToDelete = users.find(u => u.id === userId);
-    if (userToDelete) {
-      logAuditEvent('User Deleted', `Deleted user: ${userToDelete.name}`, 'user');
-    }
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
+    const target = users.find((u) => u.id === userId);
+    if (target) logAuditEvent('User Deleted', `Deleted user: ${target.name}`, 'user');
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
   };
 
   const handleUserAdd = (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => {
     const newUser: User = {
       ...userData,
-      id:
-        typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       enrolledCourseIds: [],
     };
-    logAuditEvent(
-      'User Created',
-      `Created new user: ${newUser.name} as ${newUser.role}`,
-      'user',
-    );
+    logAuditEvent('User Created', `Created new user: ${newUser.name} as ${newUser.role}`, 'user');
     setUsers((prev) => [...prev, newUser]);
   };
 
-  const handleEnrollmentSuccess = (courseId: number) => {
+  const handleEnrollmentSuccess = async (courseId: number | string): Promise<void> => {
     if (!currentUser) return;
-    if (!currentUser.enrolledCourseIds.includes(courseId)) {
-      const updatedUser = {
-        ...currentUser,
-        enrolledCourseIds: [...currentUser.enrolledCourseIds, courseId]
-      };
-      setCurrentUser(updatedUser);
-      setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
-    }
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+  
+    const idStr = String(courseId);
+  
+    
+    if (currentUser.enrolledCourseIds.some((id) => String(id) === idStr)) return;
+  
+    await api.post(
+      `/courses/enroll?userId=${currentUser.id}`,
+      { course_id: idStr },
+      token,
+    );
+  
+    const updatedUser: User = {
+      ...currentUser,
+      enrolledCourseIds: [...currentUser.enrolledCourseIds, idStr as any],
+    };
+    setCurrentUser(updatedUser);
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+    logAuditEvent('Enrolled', `Enrolled in course ${idStr}`, 'course');
   };
 
   const coursesWithEnrollmentStatus: CourseWithEnrollment[] = useMemo(() => {
-    if (!currentUser) return courses.map(c => ({...c, isEnrolled: false}));
-    return courses.map(course => ({
+    if (!currentUser) return courses.map((c) => ({ ...c, isEnrolled: false }));
+    const enrolled = new Set(currentUser.enrolledCourseIds.map((id) => String(id)));
+    return courses.map((course) => ({
       ...course,
-      isEnrolled: currentUser.enrolledCourseIds.includes(course.id)
+      isEnrolled: enrolled.has(String(course.id)),
     }));
   }, [currentUser, courses]);
 
   const filteredCourses = useMemo(() => {
     if (!searchQuery.trim()) return [];
-    const lowercasedQuery = searchQuery.toLowerCase();
-    return coursesWithEnrollmentStatus.filter(course =>
-      course.title.toLowerCase().includes(lowercasedQuery) ||
-      course.description.toLowerCase().includes(lowercasedQuery) ||
-      course.category.toLowerCase().includes(lowercasedQuery) ||
-      course.instructor.toLowerCase().includes(lowercasedQuery)
+    const q = searchQuery.toLowerCase();
+    return coursesWithEnrollmentStatus.filter((course) =>
+      course.title.toLowerCase().includes(q) ||
+      course.description.toLowerCase().includes(q) ||
+      course.category.toLowerCase().includes(q) ||
+      course.instructor.toLowerCase().includes(q),
     );
   }, [searchQuery, coursesWithEnrollmentStatus]);
 
-  const handleToggleLessonComplete = (courseId: number, lessonId: number) => {
+  const handleToggleLessonComplete = (
+    courseId: number | string,
+    lessonId: number | string,
+  ) => {
     let courseToComplete: Course | null = null;
-    const updatedCourses = courses.map(course => {
-        if (course.id === courseId) {
-            const updatedContent = course.content.map(module => {
-                const updatedLessons = module.lessons.map(lesson =>
-                    lesson.id === lessonId ? { ...lesson, isCompleted: !lesson.isCompleted } : lesson
-                );
-                const completedLessons = updatedLessons.filter(l => l.isCompleted).length;
-                const moduleProgress = updatedLessons.length > 0 ? Math.round((completedLessons / updatedLessons.length) * 100) : 0;
-                return { ...module, lessons: updatedLessons, progress: moduleProgress };
-            });
-
-            const totalLessons = updatedContent.reduce((acc, module) => acc + module.lessons.length, 0);
-            const totalCompletedLessons = updatedContent.reduce((acc, module) => acc + module.lessons.filter(l => l.isCompleted).length, 0);
-            const courseProgress = totalLessons > 0 ? Math.round((totalCompletedLessons / totalLessons) * 100) : 0;
-            const isCourseComplete = courseProgress === 100;
-            const updatedCourse = { ...course, content: updatedContent, progress: courseProgress, completed: isCourseComplete };
-            if (isCourseComplete && !course.completed) courseToComplete = updatedCourse;
-            if(selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
-            return updatedCourse;
-        }
-        return course;
-    });
-    setCourses(updatedCourses);
-    if (courseToComplete) setCompletedCourse(courseToComplete);
-    logAuditEvent('Lesson Toggled', `Lesson ID: ${lessonId} toggled for course ID: ${courseId}`, 'course');
-  };
-
-  const handleProjectSubmit = async (courseId: number, projectId: number, submissionLink: string) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const updatedProjects = course.projects.map(project =>
-          project.id === projectId ? { ...project, isGrading: true, submissionLink } : project
+    let toggledToCompleted = false;
+  
+    const updatedCourses = courses.map((course) => {
+      if (String(course.id) === String(courseId)) {
+        const updatedContent = course.content.map((module) => {
+          const updatedLessons = module.lessons.map((lesson) => {
+            if (String(lesson.id) === String(lessonId)) {
+              toggledToCompleted = !lesson.isCompleted;
+              return { ...lesson, isCompleted: !lesson.isCompleted };
+            }
+            return lesson;
+          });
+          const completed = updatedLessons.filter((l) => l.isCompleted).length;
+          const progress =
+            updatedLessons.length > 0
+              ? Math.round((completed / updatedLessons.length) * 100)
+              : 0;
+          return { ...module, lessons: updatedLessons, progress };
+        });
+  
+        const totalLessons = updatedContent.reduce(
+          (acc, m) => acc + m.lessons.length,
+          0,
         );
-        const updatedCourse = { ...course, projects: updatedProjects };
-        if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
+        const totalCompleted = updatedContent.reduce(
+          (acc, m) => acc + m.lessons.filter((l) => l.isCompleted).length,
+          0,
+        );
+        const courseProgress =
+          totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+        const isCourseComplete = courseProgress === 100;
+  
+        const updatedCourse = {
+          ...course,
+          content: updatedContent,
+          progress: courseProgress,
+          completed: isCourseComplete,
+        };
+  
+        if (isCourseComplete && !course.completed) courseToComplete = updatedCourse;
+        if (String(selectedCourse?.id) === String(courseId))
+          setSelectedCourse(updatedCourse);
+  
         return updatedCourse;
       }
       return course;
-    }));
+    });
+  
+    setCourses(updatedCourses);
+    if (courseToComplete) setCompletedCourse(courseToComplete);
+    logAuditEvent(
+      'Lesson Toggled',
+      `Lesson ${lessonId} toggled for course ${courseId}`,
+      'course',
+    );
+  
+  
+    handleLessonProgressToggle(lessonId, toggledToCompleted);
+  };
 
-    // Simulate AI Grading
-    setTimeout(() => {
-      setCourses(prev => prev.map(course => {
-        if (course.id === courseId) {
-          const updatedProjects = course.projects.map(project => {
-            if (project.id === projectId) {
-              const score = Math.floor(Math.random() * 21) + 80; // 80-100
-              return {
-                ...project,
-                isSubmitted: true,
-                isGrading: false,
-                score,
-                feedback: `Great job on this project! Your implementation of the core concepts is solid. Score: ${score}%`
-              };
-            }
-            return project;
-          });
-          const updatedCourse = { ...course, projects: updatedProjects };
-          if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
-          return updatedCourse;
+  // Real backend call for lesson progress
+  const handleLessonProgressToggle = async (lessonId: string | number, isCompleted: boolean): Promise<void> => {
+    if (!currentUser) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+    try {
+      await api.patch(
+        `/courses/progress?userId=${currentUser.id}`,
+        { lesson_id: String(lessonId), is_completed: isCompleted },
+        token,
+      );
+    } catch (err) {
+      console.error('Lesson progress update failed:', err);
+    }
+  };
+
+  const handleProjectSubmit = async (
+    courseId: number | string,
+    projectId: number | string,
+    submissionLink: string,
+  ) => {
+    setCourses((prev) =>
+      prev.map((course) => {
+        if (String(course.id) === String(courseId)) {
+          const updatedProjects = course.projects.map((p) =>
+            String(p.id) === String(projectId)
+              ? { ...p, isGrading: true, submissionLink }
+              : p,
+          );
+          const updated = { ...course, projects: updatedProjects };
+          if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+          return updated;
         }
         return course;
-      }));
-      logAuditEvent('Project Submitted', `Project ID: ${projectId} submitted for course ID: ${courseId} with link: ${submissionLink}`, 'course');
+      }),
+    );
+  
+    setTimeout(() => {
+      setCourses((prev) =>
+        prev.map((course) => {
+          if (String(course.id) === String(courseId)) {
+            const updatedProjects = course.projects.map((p) => {
+              if (String(p.id) === String(projectId)) {
+                const score = Math.floor(Math.random() * 21) + 80;
+                return {
+                  ...p,
+                  isSubmitted: true,
+                  isGrading: false,
+                  score,
+                  feedback: `Great job! Score: ${score}%`,
+                };
+              }
+              return p;
+            });
+            const updated = { ...course, projects: updatedProjects };
+            if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+            return updated;
+          }
+          return course;
+        }),
+      );
+      logAuditEvent('Project Submitted', `Project ${projectId} submitted for course ${courseId}`, 'course');
     }, 2000);
   };
 
@@ -368,243 +531,277 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: Date.now(),
       text,
       sender: 'user',
-      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
     };
-    
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setIsBotTyping(true);
-
     try {
-      let responseText = "I'm sorry, I'm having trouble connecting to my brain right now. Please try again later!";
-      
+      let responseText = "I'm having trouble connecting right now.";
       if (ai) {
-        const result = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: text
-        });
-        responseText = result.text || "I'm sorry, I couldn't generate a response.";
+        const result = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: text });
+        responseText = result.text || "I couldn't generate a response.";
       } else {
-        responseText = "That's a great question! As an AI assistant for Cortouch Media Academy, I'm here to help you with your learning. Could you tell me more about what you're looking for?";
+        responseText = "I'm here to help! Could you tell me more?";
       }
-
-      const botMsg: ChatMessage = {
-        id: Date.now() + 1,
-        text: responseText,
-        sender: 'bot',
-        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
-      };
-      setMessages(prev => [...prev, botMsg]);
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now() + 1, text: responseText, sender: 'bot', timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) },
+      ]);
     } catch (error) {
-      console.error("AI Error:", error);
-      const errorMsg: ChatMessage = {
-        id: Date.now() + 2,
-        text: "I encountered an error while processing your request. Please try again.",
-        sender: 'bot',
-        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      console.error('AI Error:', error);
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now() + 2, text: 'I hit an error. Try again.', sender: 'bot', timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) },
+      ]);
     } finally {
       setIsBotTyping(false);
     }
   };
 
-  const handleSendCourseMessage = async (courseId: number, text: string) => {
+  const handleSendCourseMessage = async (courseId: number | string, text: string) => {
     const userMsg: ChatMessage = {
       id: Date.now(),
       text,
       sender: 'user',
-      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
     };
-
-    // Add user message immediately
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const updatedHistory = [...(course.chatHistory || []), userMsg];
-        const updatedCourse = { ...course, chatHistory: updatedHistory, isAssistantTyping: true };
-        if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
-        return updatedCourse;
-      }
-      return course;
-    }));
-
+    setCourses((prev) =>
+      prev.map((course) => {
+        if (String(course.id) === String(courseId)) {
+          const updated = { ...course, chatHistory: [...(course.chatHistory || []), userMsg], isAssistantTyping: true };
+          if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+          return updated;
+        }
+        return course;
+      }),
+    );
     try {
-      let responseText = "I'm here to help you with this specific course. What would you like to know?";
-      
+      let responseText = "I'm here to help. What would you like to know?";
       if (ai) {
-        const course = courses.find(c => c.id === courseId);
-        const prompt = `You are a helpful teaching assistant for the course "${course?.title}". The student asks: ${text}`;
-        const result = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: prompt
-        });
-        responseText = result.text || "I'm sorry, I couldn't generate a response.";
+        const course = courses.find((c) => String(c.id) === String(courseId));
+        const prompt = `You are a teaching assistant for "${course?.title}". Student asks: ${text}`;
+        const result = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
+        responseText = result.text || "I couldn't generate a response.";
       }
-
-      const botMsg: ChatMessage = {
-        id: Date.now() + 1,
-        text: responseText,
-        sender: 'bot',
-        timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
-      };
-
-      setCourses(prev => prev.map(course => {
-        if (course.id === courseId) {
-          
-          const updatedHistory = [...(course.chatHistory || []), botMsg];
-          const updatedCourse = { ...course, chatHistory: updatedHistory, isAssistantTyping: false };
-          if (selectedCourse?.id === courseId) setSelectedCourse(updatedCourse);
-          return updatedCourse;
-        }
-        return course;
-      }));
-    } catch (error) {
-      console.error("AI Error:", error);
-      setCourses(prev => prev.map(course => {
-        if (course.id === courseId) {
-          const errorMsg: ChatMessage = {
-            id: Date.now() + 2,
-            text: "I encountered an error. Please try again.",
-            sender: 'bot',
-            timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
-          };
-          return { 
-            ...course, 
-            chatHistory: [...(course.chatHistory || []), errorMsg],
-            isAssistantTyping: false 
-          };
-        }
-        return course;
-      }));
-    }
-  };
-
-  const handleInstructorCourseAdd = (courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>, initialModules?: { title: string }[]) => {
-    const newCourse: Course = {
-      ...courseData,
-      id: Math.max(...courses.map(c => c.id), 0) + 1,
-      enrollmentCount: 0,
-      rating: 0,
-      progress: 0,
-      completed: false,
-      reviews: [],
-      content: initialModules ? initialModules.map((m, i) => ({
-        id: i + 1,
-        title: m.title,
-        lessons: [],
-        progress: 0
-      })) : [],
-      projects: [],
-      webinars: []
-    };
-    setCourses(prev => [...prev, newCourse]);
-    logAuditEvent('Course Created', `Instructor ${currentUser?.name} created course: ${newCourse.title}`, 'course');
-  };
-
-  const handleCourseUpdate = (courseId: number, updatedDetails: Partial<Course>) => {
-    setCourses(prev => prev.map(c => {
-      if (c.id === courseId) {
-        const updated = { ...c, ...updatedDetails };
-        if (selectedCourse?.id === courseId) setSelectedCourse(updated);
-        if (editingCourse?.id === courseId) setEditingCourse(updated);
-        return updated;
-      }
-      return c;
-    }));
-    logAuditEvent('Course Updated', `Updated course ID: ${courseId}`, 'course');
-  };
-
-  const handleCourseDelete = (courseId: number) => {
-    const courseToDelete = courses.find(c => c.id === courseId);
-    if (courseToDelete) {
-      logAuditEvent('Course Deleted', `Deleted course: ${courseToDelete.title}`, 'course');
-    }
-    setCourses(prev => prev.filter(c => c.id !== courseId));
-    if (selectedCourse?.id === courseId) setSelectedCourse(null);
-    if (editingCourse?.id === courseId) setEditingCourse(null);
-  };
-
-  const handleModuleAdd = (courseId: number, moduleTitle: string) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const newModule = {
-          id: Math.max(...course.content.map(m => m.id), 0) + 1,
-          title: moduleTitle,
-          lessons: [],
-          progress: 0
-        };
-        const updatedCourse = { ...course, content: [...course.content, newModule] };
-        if (editingCourse?.id === courseId) setEditingCourse(updatedCourse);
-        return updatedCourse;
-      }
-      return course;
-    }));
-    logAuditEvent('Module Added', `Added module "${moduleTitle}" to course ID: ${courseId}`, 'course');
-  };
-
-  const handleLessonAdd = (courseId: number, moduleId: number, lessonData: Omit<Lesson, 'id' | 'isCompleted'>) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const updatedContent = course.content.map(module => {
-          if (module.id === moduleId) {
-            const newLesson = {
-              ...lessonData,
-              id: Math.max(...module.lessons.map(l => l.id), 0) + 1,
-              isCompleted: false
+      setCourses((prev) =>
+        prev.map((course) => {
+          if (String(course.id) === String(courseId)) {
+            const updated = {
+              ...course,
+              chatHistory: [...(course.chatHistory || []), { id: Date.now() + 1, text: responseText, sender: 'bot' as const, timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }],
+              isAssistantTyping: false,
             };
-            return { ...module, lessons: [...module.lessons, newLesson] };
+            if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+            return updated;
           }
-          return module;
-        });
-        const updatedCourse = { ...course, content: updatedContent };
-        if (editingCourse?.id === courseId) setEditingCourse(updatedCourse);
-        return updatedCourse;
-      }
-      return course;
-    }));
-    logAuditEvent('Lesson Added', `Added lesson "${lessonData.title}" to module ID: ${moduleId} in course ID: ${courseId}`, 'course');
+          return course;
+        }),
+      );
+    } catch (error) {
+      console.error('AI Error:', error);
+      setCourses((prev) =>
+        prev.map((course) => {
+          if (String(course.id) === String(courseId)) {
+            return {
+              ...course,
+              chatHistory: [...(course.chatHistory || []), { id: Date.now() + 2, text: 'Error. Try again.', sender: 'bot' as const, timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }],
+              isAssistantTyping: false,
+            };
+          }
+          return course;
+        }),
+      );
+    }
   };
 
-  const handleLessonDelete = (courseId: number, lessonId: number) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const updatedContent = course.content.map(module => {
-          return { ...module, lessons: module.lessons.filter(l => l.id !== lessonId) };
-        });
-        const updatedCourse = { ...course, content: updatedContent };
-        if (editingCourse?.id === courseId) setEditingCourse(updatedCourse);
-        return updatedCourse;
+  const handleInstructorCourseAdd = async (
+    courseData: Omit<Course, 'id' | 'enrollmentCount' | 'rating' | 'progress' | 'completed' | 'reviews' | 'content' | 'projects' | 'webinars'>,
+    initialModules?: { title: string }[],
+  ): Promise<void> => {
+    if (!currentUser) throw new Error('You must be signed in to create a course');
+    const token = authStorage.getToken();
+    const baseSlug = courseData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const uniqueSuffix = Math.random().toString(36).slice(2, 8);
+const slug = `${baseSlug}-${uniqueSuffix}`;
+    try {
+      const created: any = await api.post(
+        `/courses?instructorId=${currentUser.id}`,
+        {
+          title: courseData.title,
+          slug,
+          description: courseData.description,
+          short_description: courseData.description.slice(0, 150),
+          category: courseData.category,
+          price: courseData.price ?? 0,
+          image_url: courseData.imageUrl,
+          status: 'PUBLISHED',
+          is_published: true,
+        },
+        token,
+      );
+      const createdCourse = created?.course ?? created;
+      const newCourseId = createdCourse?.id;
+      if (initialModules?.length && newCourseId) {
+        for (let i = 0; i < initialModules.length; i++) {
+          try {
+            await api.post(
+              `/courses/courses/${newCourseId}/modules?instructorId=${currentUser.id}`,
+              { title: initialModules[i].title, order_number: i },
+              token,
+            );
+          } catch (e) {
+            console.error('Module creation failed:', e);
+          }
+        }
       }
-      return course;
-    }));
-    logAuditEvent('Lesson Deleted', `Deleted lesson ID: ${lessonId} from course ID: ${courseId}`, 'course');
+      await refreshCourses();
+      logAuditEvent('Course Created', `Created course: ${courseData.title}`, 'course');
+    } catch (err: any) {
+      console.error('Course creation failed:', err);
+      throw new Error(err?.message ?? 'Failed to create course');
+    }
+  };
+
+  const handleCourseUpdate = async (courseId: number | string, updatedDetails: Partial<Course>): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+    const payload: any = {};
+    if (updatedDetails.title) payload.title = updatedDetails.title;
+    if (updatedDetails.description) payload.description = updatedDetails.description;
+    if (updatedDetails.category) payload.category = updatedDetails.category;
+    if (updatedDetails.price !== undefined) payload.price = updatedDetails.price;
+    if (updatedDetails.imageUrl) payload.image_url = updatedDetails.imageUrl;
+    await api.put(`/courses/${String(courseId)}?instructorId=${currentUser.id}`, payload, token);
+    setCourses((prev) =>
+      prev.map((c) => (String(c.id) === String(courseId) ? { ...c, ...updatedDetails } : c)),
+    );
+    logAuditEvent('Course Updated', `Updated course ${courseId}`, 'course');
+  };
+
+  const handleCourseDelete = async (courseId: number | string): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+    await api.delete(`/courses/${String(courseId)}?instructorId=${currentUser.id}`, token);
+    setCourses((prev) => prev.filter((c) => String(c.id) !== String(courseId)));
+    if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(null);
+    if (String(editingCourse?.id) === String(courseId)) setEditingCourse(null);
+    logAuditEvent('Course Deleted', `Deleted course ${courseId}`, 'course');
+  };
+
+  const handleModuleAdd = async (
+    courseId: number | string,
+    moduleTitle: string,
+  ): Promise<{ id: string | number; title: string } | null> => {
+    console.log('=== handleModuleAdd START ===');
+    const token = authStorage.getToken();
+    if (!token || !currentUser) {
+      console.error('Not signed in — no token or user');
+      throw new Error('Not signed in');
+    }
+    const course = courses.find((c) => String(c.id) === String(courseId));
+    const order_number = course?.content?.length ?? 0;
+    const url = `/courses/courses/${String(courseId)}/modules?instructorId=${currentUser.id}`;
+    console.log('POST URL:', url);
+    console.log('POST body:', { title: moduleTitle, order_number });
+  
+    let response: any;
+    try {
+      response = await api.post(url, { title: moduleTitle, order_number }, token);
+      console.log('POST response:', response);
+    } catch (err) {
+      console.error('POST failed:', err);
+      throw err;
+    }
+  
+    await refreshCourses();
+    logAuditEvent('Module Added', `Added module "${moduleTitle}"`, 'course');
+  
+    // Return the actual created module so EditCourse can replace the temp ID
+    if (response && response.id) {
+      return { id: response.id, title: response.title ?? moduleTitle };
+    }
+    return null;
+  };
+
+  const handleLessonAdd = async (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+  ): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+    const course = courses.find((c) => String(c.id) === String(courseId));
+    const moduleObj = course?.content?.find((m) => String(m.id) === String(moduleId));
+    const order_number = moduleObj?.lessons?.length ?? 0;
+  
+    await api.post(
+      `/courses/modules/${String(moduleId)}/lessons?instructorId=${currentUser.id}`,
+      {
+        title: lessonData.title,
+        description: lessonData.description,
+        video_url: lessonData.videoUrl,
+        video_duration: lessonData.durationMinutes,
+        text_content: lessonData.content,
+        order_number,
+        is_free: lessonData.isFree ?? false,
+      },
+      token,
+    );
+  
+    await refreshCourses();
+    logAuditEvent('Lesson Added', `Added lesson "${lessonData.title}"`, 'course');
+  };
+
+  const handleLessonDelete = async (courseId: number | string, lessonId: number | string): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+    await api.delete(`/courses/lessons/${String(lessonId)}?instructorId=${currentUser.id}`, token);
+    await refreshCourses();
+    logAuditEvent('Lesson Deleted', `Deleted lesson ${lessonId}`, 'course');
   };
 
   const handleWebinarAdd = (courseId: number, webinarData: Omit<Webinar, 'id'>) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const newWebinar = {
-          ...webinarData,
-          id: Math.max(...(course.webinars || []).map(w => w.id), 0) + 1,
-        };
-        const updatedCourse = { ...course, webinars: [...(course.webinars || []), newWebinar] };
-        if (editingCourse?.id === courseId) setEditingCourse(updatedCourse);
-        return updatedCourse;
-      }
-      return course;
-    }));
-    logAuditEvent('Webinar Added', `Added webinar "${webinarData.title}" to course ID: ${courseId}`, 'course');
+    setCourses((prev) =>
+      prev.map((course) => {
+        if (String(course.id) === String(courseId)) {
+          const newWebinar = { ...webinarData, id: Math.max(...(course.webinars || []).map((w) => w.id), 0) + 1 };
+          const updated = { ...course, webinars: [...(course.webinars || []), newWebinar] };
+          if (editingCourse?.id === courseId) setEditingCourse(updated);
+          return updated;
+        }
+        return course;
+      }),
+    );
+    logAuditEvent('Webinar Added', `Added webinar "${webinarData.title}"`, 'course');
   };
 
   const handleWebinarDelete = (courseId: number, webinarId: number) => {
-    setCourses(prev => prev.map(course => {
-      if (course.id === courseId) {
-        const updatedCourse = { ...course, webinars: (course.webinars || []).filter(w => w.id !== webinarId) };
-        if (editingCourse?.id === courseId) setEditingCourse(updatedCourse);
-        return updatedCourse;
-      }
-      return course;
-    }));
-    logAuditEvent('Webinar Deleted', `Deleted webinar ID: ${webinarId} from course ID: ${courseId}`, 'course');
+    setCourses((prev) =>
+      prev.map((course) => {
+        if (String(course.id) === String(courseId)) {
+          const updated = { ...course, webinars: (course.webinars || []).filter((w) => w.id !== webinarId) };
+          if (editingCourse?.id === courseId) setEditingCourse(updated);
+          return updated;
+        }
+        return course;
+      }),
+    );
+    logAuditEvent('Webinar Deleted', `Deleted webinar ${webinarId}`, 'course');
+  };
+
+  const handleWebinarRegister = async (webinarId: string | number): Promise<void> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+    await Api.webinars.register(
+      { webinar_id: String(webinarId), user_id: currentUser.id },
+      token,
+    );
+    logAuditEvent('Webinar Registered', `Registered for webinar ${webinarId}`, 'user');
   };
 
   const handleInstructorMessageSend = (studentId: string, text: string) => {
@@ -614,10 +811,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       instructorId: currentUser.id,
       studentId,
       text,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    setInstructorMessages(prev => [...prev, newMessage]);
-    logAuditEvent('Message Sent', `Instructor ${currentUser.name} messaged student ID: ${studentId}`, 'user');
+    setInstructorMessages((prev) => [...prev, newMessage]);
+    logAuditEvent('Message Sent', `Instructor ${currentUser.name} messaged student ${studentId}`, 'user');
   };
 
   const handlePayoutRequest = (payoutData: Omit<PayoutRequest, 'id' | 'instructorId' | 'status' | 'timestamp'>) => {
@@ -627,23 +824,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: Date.now(),
       instructorId: currentUser.id,
       status: 'pending',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-    setPayoutRequests(prev => [...prev, newRequest]);
-    logAuditEvent('Payout Requested', `Instructor ${currentUser.name} requested payout of ${payoutData.amount}`, 'system');
+    setPayoutRequests((prev) => [...prev, newRequest]);
+    logAuditEvent('Payout Requested', `Instructor ${currentUser.name} requested ${payoutData.amount}`, 'system');
   };
 
-  const value = {
+  const value: AppContextType = {
     isLoggedIn, currentUser, users, courses, currentPage, selectedCourse, editingCourse, completedCourse,
-    isChatOpen, isBotTyping, isHydrated, messages, searchQuery, language, coursesWithEnrollmentStatus, filteredCourses, auditLogs,
-    payoutRequests, instructorMessages,
+    isChatOpen, isBotTyping, isHydrated, messages, searchQuery, language,
+    coursesWithEnrollmentStatus, filteredCourses, auditLogs, payoutRequests, instructorMessages,
     setIsLoggedIn, setCurrentUser, setCourses, setCurrentPage, setSelectedCourse, setEditingCourse,
     setCompletedCourse, setIsChatOpen, setIsBotTyping, setMessages, setSearchQuery, setLanguage,
     handleLogin, handleLogout, handleNavigate, handleCourseSelect, handleSearchChange,
-    handleUserUpdate, handleUserDelete, handleUserAdd, handleEnrollmentSuccess, handleToggleLessonComplete, handleProjectSubmit,
+    handleUserUpdate, handleUserDelete, handleUserAdd,
+    handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle, handleProjectSubmit,
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
-    handleCourseUpdate, handleCourseDelete, handleModuleAdd, handleLessonAdd, handleLessonDelete, handleWebinarAdd, handleWebinarDelete
+    handleCourseUpdate, handleCourseDelete, handleModuleAdd, handleLessonAdd, handleLessonDelete,
+    handleWebinarAdd, handleWebinarDelete, handleWebinarRegister,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

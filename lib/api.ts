@@ -242,11 +242,12 @@ export const Api = {
      api.delete(`/courses/${id}`, token),
    enroll: (body: unknown, token: string) =>
      api.post('/courses/enroll', body, token),
-   userEnrollments: (userId: string, token?: string) =>
-     api.get(`/courses/users/${userId}/enrollments`, token),
- },
+     userEnrollments: (userId: string, token?: string) =>
+    api.get(`/courses/users/${userId}/enrollments`, token),
+  recentEnrollments: (instructorId: string, limit = 5) =>
+    api.get(`/courses/instructor/${instructorId}/recent-enrollments?limit=${limit}`),
+},
 
- // Assets (image uploads)
 assets: {
   upload: (
     file: File,
@@ -353,12 +354,12 @@ assets: {
      api.get(`/videos/lesson/${lessonId}`),
  },
 
- // Certificates
  certificates: {
-   mine: (token: string) => api.get('/certificates/my-certificates', token),
-   verify: (code: string) => api.get(`/certificates/verify/${code}`),
-   get: (id: string) => api.get(`/certificates/${id}`),
- },
+  mine: (userId: string, token: string) =>
+    api.get(`/certificates/my-certificates?userId=${userId}`, token),
+  verify: (code: string) => api.get(`/certificates/verify/${code}`),
+  get: (id: string) => api.get(`/certificates/${id}`),
+},
 };
 
 export default api;

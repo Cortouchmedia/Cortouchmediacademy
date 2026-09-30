@@ -1,25 +1,31 @@
-// components/PaystackScript.tsx
 "use client";
 
 import Script from "next/script";
 import { useEffect } from "react";
 
+
 export default function PaystackScript() {
   useEffect(() => {
-    console.log('PaystackScript component mounted');
-    
-    // Check if script is already loaded
-    if (typeof window !== 'undefined' && window.PaystackPop) {
-      console.log('✅ Paystack already loaded');
-    }
+    if (typeof window === "undefined") return;
+
+
+    const errorHandler = (event: ErrorEvent) => {
+      if (event.message?.includes("Paystack Inline javascript file inside of a form")) {
+        console.warn("Paystack: no form present on this page — script idle");
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("error", errorHandler);
+    return () => window.removeEventListener("error", errorHandler);
   }, []);
 
   return (
     <Script
       src="https://js.paystack.co/v1/inline.js"
       strategy="afterInteractive"
-      onLoad={() => console.log('✅ Paystack script loaded successfully')}
-      onError={(e) => console.error('❌ Failed to load Paystack script:', e)}
+      onLoad={() => console.log("✅ Paystack script loaded")}
+      onError={() => console.warn("⚠️ Paystack script failed to load")}
     />
   );
 }
