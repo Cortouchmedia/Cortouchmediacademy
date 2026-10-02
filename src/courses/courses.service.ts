@@ -841,95 +841,16 @@ export class CoursesService {
       .eq("user_id", userId)
       .eq("course_id", courseId);
   
-    if (updateError) {
-      this.logger.error(
-        `Failed to update enrollment progress: ${updateError.message}`,
-      );
-      return;
-    }
-  
-    // ✅ FIX 5: Auto-issue certificate using the same isCompleted flag
-    if (isCompleted) {
-      await this.issueCertificateIfMissing(userId, courseId);
-    }
-  }
-  
-  /**
-   * Issues a certificate for the given user/course if one doesn't already exist.
-   * Safe to call multiple times — idempotent.
-   */
-  private async issueCertificateIfMissing(userId: string, courseId: string) {
-    const supabase = this.supabaseService.getAdminClient();
-  
-    try {
-      const { data: existingCert, error: fetchError } = await supabase
-        .from("certificates")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("course_id", courseId)
-        .maybeSingle();
-  
-      if (fetchError) {
+      if (updateError) {
         this.logger.error(
-          `Certificate lookup failed: ${fetchError.message}`,
+          `Failed to update enrollment progress (user=${userId}, course=${courseId}): ${updateError.message}`,
         );
         return;
       }
   
-      if (existingCert) {
-        // Already issued — nothing to do
-        return;
-      }
-  
-      const seed = userId + courseId;
-      const certificateNumber = `CERT-${new Date().getFullYear()}-${this.generateCertificateHash(
-        seed,
-      ).substring(0, 6)}`;
-      const verificationCode = this.generateCertificateHash(
-        seed + Date.now(),
-      )
-        .substring(0, 8)
-        .toUpperCase();
-  
-      const { error: certError } = await supabase
-        .from("certificates")
-        .insert({
-          user_id: userId,
-          course_id: courseId,
-          certificate_number: certificateNumber,
-          issue_date: new Date().toISOString(),
-          verification_code: verificationCode,
-          completed_at: new Date().toISOString(),
-          metadata: { grade: "PASS", generated_by: "auto" },
-        });
-  
-      if (certError) {
-        this.logger.error(
-          `Certificate insert failed: ${certError.message}`,
-        );
-      } else {
-        this.logger.log(
-          `Certificate issued to ${userId} for course ${courseId}`,
-        );
-      }
-    } catch (err) {
-      this.logger.error(
-        `Auto-issue certificate crashed: ${
-          err instanceof Error ? err.message : err
-        }`,
-      );
-    }
   }
+  
  
-   private generateCertificateHash(input: string): string {
-     let hash = 0;
-     for (let i = 0; i < input.length; i++) {
-       const char = input.charCodeAt(i);
-       hash = (hash << 5) - hash + char;
-       hash = hash & hash;
-     }
-     return Math.abs(hash).toString(16);
-   }
 
   // ==================== REVIEWS ====================
 
