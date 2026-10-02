@@ -244,8 +244,22 @@ export const Api = {
      api.post('/courses/enroll', body, token),
      userEnrollments: (userId: string, token?: string) =>
     api.get(`/courses/users/${userId}/enrollments`, token),
-  recentEnrollments: (instructorId: string, limit = 5) =>
+    recentEnrollments: (instructorId: string, limit = 5) =>
     api.get(`/courses/instructor/${instructorId}/recent-enrollments?limit=${limit}`),
+  instructorStudents: (instructorId: string, token?: string) =>
+    api.get<Array<{
+      user_id: string;
+      user: {
+        id: string;
+        full_name: string | null;
+        email: string | null;
+        avatar_url: string | null;
+      } | null;
+      course_count: number;
+      completed_count: number;
+      avg_progress: number;
+      course_ids: string[];
+    }>>(`/courses/instructor/${instructorId}/students`, token),
 },
 
 assets: {

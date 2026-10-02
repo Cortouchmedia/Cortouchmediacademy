@@ -147,8 +147,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       duration: raw.duration ?? 'Self-paced',
       imageUrl: raw.image_url ?? raw.cover_url ?? '',
       price: Number(raw.price ?? 0) || 0,
-      rating: Number(raw.rating ?? 0) || 0,
-      enrollmentCount: Number(raw.total_rating_count ?? 0) || 0,
+      rating: Number(raw.average_rating ?? 0) || 0,
+      enrollmentCount: Number(raw.enrollment_count ?? 0) || 0,
       modules: Array.isArray(raw.modules) ? raw.modules.length : 0,
       content: (safeArray(raw.content).length > 0 ? safeArray(raw.content) : safeArray(raw.modules)).map((m: any) => ({
         ...m,
@@ -173,7 +173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       prerequisiteCourseIds: safeArray(raw.prerequisiteCourseIds),
     };
   };
-  // Load courses + apply enrollment progress — sequential, no race
+ 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!isLoggedIn || !currentUser?.id) return;
@@ -233,6 +233,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, [isLoggedIn, currentUser?.id]);
+
+
+useEffect(() => {
+  if (!selectedCourse) return;
+  const updated = courses.find(
+    (c) => String(c.id) === String(selectedCourse.id),
+  );
+  if (updated && updated !== selectedCourse) {
+    setSelectedCourse(updated);
+  }
+
+}, [courses]);
 
 
   const logAuditEvent = (action: string, details: string, type: AuditLog['type']) => {
@@ -461,16 +473,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     handleLessonProgressToggle(lessonId, toggledToCompleted);
   };
 
-  // Real backend call for lesson progress
-  const handleLessonProgressToggle = async (lessonId: string | number, isCompleted: boolean): Promise<void> => {
+  const handleLessonProgressToggle = async (
+    lessonId: string | number,
+    isCompleted: boolean,
+  ): Promise<void> => {
     if (!currentUser) return;
     const token = authStorage.getToken();
     if (!token) return;
+  
     try {
       await api.patch(
         `/courses/progress?userId=${currentUser.id}`,
         { lesson_id: String(lessonId), is_completed: isCompleted },
         token,
+      );
+  
+      // Re-sync enrollments from the server so client state matches DB
+      const enrollmentsData: any = await Api.courses.userEnrollments(
+        currentUser.id,
+        token,
+      );
+      const enrollList = Array.isArray(enrollmentsData)
+        ? enrollmentsData
+        : enrollmentsData?.data ?? [];
+  
+      const meta: Record<string, { progress: number; completed: boolean }> = {};
+      enrollList.forEach((e: any) => {
+        const cid = String(e.course_id);
+        const pct = Math.round(Number(e.progress_percentage ?? 0));
+        const isDone =
+          pct >= 100 ||
+          (typeof e.completed_at === 'string' && e.completed_at.length > 0);
+        meta[cid] = { progress: pct, completed: isDone };
+      });
+  
+      setCourses((prev) =>
+        prev.map((c) => {
+          const m = meta[String(c.id)];
+          return m ? { ...c, progress: m.progress, completed: m.completed } : c;
+        }),
       );
     } catch (err) {
       console.error('Lesson progress update failed:', err);
