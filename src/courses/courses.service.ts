@@ -560,7 +560,7 @@ export class CoursesService {
 
   async getUserEnrollments(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
-
+  
     const { data, error } = await supabase
       .from("course_enrollments")
       .select(
@@ -571,15 +571,21 @@ export class CoursesService {
       )
       .eq("user_id", userId)
       .order("enrollment_date", { ascending: false });
-
+  
     if (error) {
       this.logger.error(`Failed to fetch enrollments: ${error.message}`);
       throw new BadRequestException(
         `Failed to fetch enrollments: ${error.message}`,
       );
     }
-
-    return data || [];
+  
+    // Normalize so the frontend always sees a consistent shape
+    return (data || []).map((e: any) => ({
+      ...e,
+      progress_percentage: Math.round(Number(e.progress_percentage) || 0),
+      is_completed:
+        Number(e.progress_percentage) >= 100 || !!e.completed_at,
+    }));
   }
 
   async getCourseProgress(userId: string, courseId: string) {
@@ -636,8 +642,10 @@ export class CoursesService {
     const totalLessons = lessons?.length || 0;
     const completedLessons =
       progressRecords?.filter((r) => r.is_completed === true).length || 0;
-    const progressPercentage =
-      totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
+      const progressPercentage =
+      totalLessons > 0
+        ? Math.round((completedLessons / totalLessons) * 100)
+        : 0;
 
     // Create a map of lessons by module
     const lessonsByModule = new Map();
@@ -744,45 +752,43 @@ export class CoursesService {
 
   private async updateCourseProgress(userId: string, lessonId: string) {
     const supabase = this.supabaseService.getAdminClient();
-
+  
     // Get module_id from lesson
     const { data: lesson } = await supabase
       .from("course_lessons")
       .select("module_id")
       .eq("id", lessonId)
       .single();
-
+  
     if (!lesson) return;
-
+  
     // Get course_id from module
     const { data: module } = await supabase
       .from("course_modules")
       .select("course_id")
       .eq("id", lesson.module_id)
       .single();
-
+  
     if (!module) return;
-
+  
     const courseId = module.course_id;
-
   
     const { data: courseModules } = await supabase
       .from("course_modules")
       .select("id")
       .eq("course_id", courseId);
-    
+  
     if (!courseModules || courseModules.length === 0) return;
-    
+  
     const moduleIds = courseModules.map((m) => m.id);
-    
- 
+  
     const { data: allLessons } = await supabase
       .from("course_lessons")
       .select("id")
       .in("module_id", moduleIds);
-    
+  
     if (!allLessons || allLessons.length === 0) return;
-
+  
     // Get completed lessons
     const { data: completedLessons } = await supabase
       .from("user_lesson_progress")
@@ -793,70 +799,127 @@ export class CoursesService {
         "lesson_id",
         allLessons.map((l) => l.id),
       );
-
+  
     const totalLessons = allLessons.length;
     const completedCount = completedLessons?.length || 0;
-    const progressPercentage = (completedCount / totalLessons) * 100;
-
-       // Update enrollment progress
-       await supabase
-       .from("course_enrollments")
-       .update({
-         progress_percentage: progressPercentage,
-         completed_at: progressPercentage === 100 ? new Date() : null,
-         last_accessed_at: new Date(),
-       })
-       .eq("user_id", userId)
-       .eq("course_id", courseId);
- 
-     // Auto-issue a certificate the moment the course hits 100%
-     if (progressPercentage === 100) {
-       try {
-         const { data: existingCert } = await supabase
-           .from("certificates")
-           .select("id")
-           .eq("user_id", userId)
-           .eq("course_id", courseId)
-           .maybeSingle();
- 
-         if (!existingCert) {
-           const seed = userId + courseId;
-           const certificateNumber = `CERT-${new Date().getFullYear()}-${this.generateCertificateHash(seed).substring(0, 6)}`;
-           const verificationCode = this.generateCertificateHash(
-             seed + Date.now(),
-           )
-             .substring(0, 8)
-             .toUpperCase();
- 
-           const { error: certError } = await supabase
-             .from("certificates")
-             .insert({
-               user_id: userId,
-               course_id: courseId,
-               certificate_number: certificateNumber,
-               issue_date: new Date(),
-               verification_code: verificationCode,
-               completed_at: new Date(),
-               metadata: { grade: "PASS", generated_by: "auto" },
-             });
- 
-           if (certError) {
-             this.logger.error(
-               `Certificate insert failed: ${certError.message}`,
-             );
-           } else {
-             this.logger.log(
-               `Certificate issued to ${userId} for course ${courseId}`,
-             );
-           }
-         }
-       } catch (err) {
-         this.logger.error(
-           `Auto-issue certificate crashed: ${err instanceof Error ? err.message : err}`,
-         );
-       }
-     }
-   }
+  
+    // ✅ FIX 1: Round to integer to avoid float precision (99.99999 -> 100)
+    const progressPercentage = Math.round(
+      (completedCount / totalLessons) * 100,
+    );
+  
+    // ✅ FIX 2: Use >= 100 instead of === 100 to be tolerant of edge cases
+    const isCompleted = progressPercentage >= 100;
+  
+    // ✅ FIX 3: Fetch existing enrollment so we don't wipe completed_at
+    const { data: existingEnrollment } = await supabase
+      .from("course_enrollments")
+      .select("id, completed_at")
+      .eq("user_id", userId)
+      .eq("course_id", courseId)
+      .maybeSingle();
+  
+    if (!existingEnrollment) {
+      this.logger.warn(
+        `No enrollment found for user ${userId} in course ${courseId}`,
+      );
+      return;
+    }
+  
+    // ✅ FIX 4: Preserve the original completed_at if it already exists
+    const completedAt = isCompleted
+      ? existingEnrollment.completed_at ?? new Date().toISOString()
+      : null;
+  
+    const { error: updateError } = await supabase
+      .from("course_enrollments")
+      .update({
+        progress_percentage: progressPercentage,
+        completed_at: completedAt,
+        last_accessed_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("course_id", courseId);
+  
+    if (updateError) {
+      this.logger.error(
+        `Failed to update enrollment progress: ${updateError.message}`,
+      );
+      return;
+    }
+  
+    // ✅ FIX 5: Auto-issue certificate using the same isCompleted flag
+    if (isCompleted) {
+      await this.issueCertificateIfMissing(userId, courseId);
+    }
+  }
+  
+  /**
+   * Issues a certificate for the given user/course if one doesn't already exist.
+   * Safe to call multiple times — idempotent.
+   */
+  private async issueCertificateIfMissing(userId: string, courseId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+  
+    try {
+      const { data: existingCert, error: fetchError } = await supabase
+        .from("certificates")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+  
+      if (fetchError) {
+        this.logger.error(
+          `Certificate lookup failed: ${fetchError.message}`,
+        );
+        return;
+      }
+  
+      if (existingCert) {
+        // Already issued — nothing to do
+        return;
+      }
+  
+      const seed = userId + courseId;
+      const certificateNumber = `CERT-${new Date().getFullYear()}-${this.generateCertificateHash(
+        seed,
+      ).substring(0, 6)}`;
+      const verificationCode = this.generateCertificateHash(
+        seed + Date.now(),
+      )
+        .substring(0, 8)
+        .toUpperCase();
+  
+      const { error: certError } = await supabase
+        .from("certificates")
+        .insert({
+          user_id: userId,
+          course_id: courseId,
+          certificate_number: certificateNumber,
+          issue_date: new Date().toISOString(),
+          verification_code: verificationCode,
+          completed_at: new Date().toISOString(),
+          metadata: { grade: "PASS", generated_by: "auto" },
+        });
+  
+      if (certError) {
+        this.logger.error(
+          `Certificate insert failed: ${certError.message}`,
+        );
+      } else {
+        this.logger.log(
+          `Certificate issued to ${userId} for course ${courseId}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Auto-issue certificate crashed: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+    }
+  }
  
    private generateCertificateHash(input: string): string {
      let hash = 0;

@@ -1,4 +1,4 @@
-// src/certificates/certificates.controller.ts
+
 import {
   Controller,
   Get,
