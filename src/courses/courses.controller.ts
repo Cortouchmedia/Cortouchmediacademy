@@ -78,6 +78,11 @@ export class CoursesController {
     return this.coursesService.getInstructorCourses(instructorId);
   }
 
+  @Get("instructor/:instructorId/students")
+  async getInstructorStudents(@Param("instructorId") instructorId: string) {
+    return this.coursesService.getInstructorStudents(instructorId);
+  }
+
   // Module routes
   @Post("courses/:courseId/modules")
   async addModule(
@@ -174,6 +179,8 @@ export class CoursesController {
       limit ? Number(limit) : 5,
     );
   }
+
+  
 
   @Patch("progress")
   async updateProgress(
