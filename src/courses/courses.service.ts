@@ -110,10 +110,49 @@ export class CoursesService {
     });
   
 
-    return courses.map((c: any) => ({
-      ...c,
-      content: modulesByCourse.get(c.id) ?? [],
-    }));
+        // Count enrollments per course
+        const { data: enrollments } = await supabase
+        .from("course_enrollments")
+        .select("course_id")
+        .in("course_id", courseIds);
+  
+      const enrollmentCountByCourse = new Map<string, number>();
+      (enrollments || []).forEach((e: any) => {
+        enrollmentCountByCourse.set(
+          e.course_id,
+          (enrollmentCountByCourse.get(e.course_id) ?? 0) + 1,
+        );
+      });
+  
+      // Average rating per course
+      const { data: reviews } = await supabase
+        .from("course_reviews")
+        .select("course_id, rating")
+        .in("course_id", courseIds);
+  
+      const ratingSumByCourse = new Map<string, number>();
+      const ratingCountByCourse = new Map<string, number>();
+      (reviews || []).forEach((r: any) => {
+        ratingSumByCourse.set(
+          r.course_id,
+          (ratingSumByCourse.get(r.course_id) ?? 0) + Number(r.rating || 0),
+        );
+        ratingCountByCourse.set(
+          r.course_id,
+          (ratingCountByCourse.get(r.course_id) ?? 0) + 1,
+        );
+      });
+  
+      return courses.map((c: any) => {
+        const count = ratingCountByCourse.get(c.id) ?? 0;
+        const sum = ratingSumByCourse.get(c.id) ?? 0;
+        return {
+          ...c,
+          content: modulesByCourse.get(c.id) ?? [],
+          enrollment_count: enrollmentCountByCourse.get(c.id) ?? 0,
+          average_rating: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
+        };
+      });
   }
 
   async getCourseById(courseId: string) {
@@ -157,18 +196,29 @@ export class CoursesService {
       .select("rating")
       .eq("course_id", courseId);
 
-    const averageRating = reviews?.length
+      const averageRating = reviews?.length
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
+
+    // Count enrollments
+    const { data: enrollmentRows } = await supabase
+      .from("course_enrollments")
+      .select("id")
+      .eq("course_id", courseId);
+
+    const enrollmentCount = enrollmentRows?.length ?? 0;
 
     return {
       ...course,
       modules: modules || [],
+      enrollment_count: enrollmentCount,
+      average_rating: Math.round(averageRating * 10) / 10,
       stats: {
         totalLessons,
         totalDuration,
         totalReviews: reviews?.length || 0,
         averageRating: Math.round(averageRating * 10) / 10,
+        totalEnrollments: enrollmentCount,
       },
     };
   }
@@ -233,24 +283,70 @@ export class CoursesService {
     return { message: "Course deleted successfully" };
   }
 
-  async getInstructorCourses(instructorId: string) {
-    const supabase = this.supabaseService.getAdminClient();
+ async getInstructorCourses(instructorId: string) {
+  const supabase = this.supabaseService.getAdminClient();
 
-    const { data, error } = await supabase
-      .from("courses")
-      .select("*")
-      .eq("instructor_id", instructorId)
-      .order("created_at", { ascending: false });
+  // 1. Fetch instructor's courses
+  const { data: courses, error } = await supabase
+    .from("courses")
+    .select("*")
+    .eq("instructor_id", instructorId)
+    .order("created_at", { ascending: false });
 
-    if (error) {
-      this.logger.error(`Failed to fetch instructor courses: ${error.message}`);
-      throw new BadRequestException(
-        `Failed to fetch instructor courses: ${error.message}`,
-      );
-    }
-
-    return data || [];
+  if (error) {
+    this.logger.error(`Failed to fetch instructor courses: ${error.message}`);
+    throw new BadRequestException(
+      `Failed to fetch instructor courses: ${error.message}`,
+    );
   }
+
+  if (!courses || courses.length === 0) return [];
+
+  const courseIds = courses.map((c) => c.id);
+
+     // Count enrollments per course
+     const { data: enrollments } = await supabase
+     .from("course_enrollments")
+     .select("course_id")
+     .in("course_id", courseIds);
+
+   const enrollmentCountByCourse = new Map<string, number>();
+   (enrollments || []).forEach((e: any) => {
+     enrollmentCountByCourse.set(
+       e.course_id,
+       (enrollmentCountByCourse.get(e.course_id) ?? 0) + 1,
+     );
+   });
+
+   // Average rating per course
+   const { data: reviews } = await supabase
+     .from("course_reviews")
+     .select("course_id, rating")
+     .in("course_id", courseIds);
+
+   const ratingSumByCourse = new Map<string, number>();
+   const ratingCountByCourse = new Map<string, number>();
+   (reviews || []).forEach((r: any) => {
+     ratingSumByCourse.set(
+       r.course_id,
+       (ratingSumByCourse.get(r.course_id) ?? 0) + Number(r.rating || 0),
+     );
+     ratingCountByCourse.set(
+       r.course_id,
+       (ratingCountByCourse.get(r.course_id) ?? 0) + 1,
+     );
+   });
+
+   return courses.map((c: any) => {
+    const count = ratingCountByCourse.get(c.id) ?? 0;
+    const sum = ratingSumByCourse.get(c.id) ?? 0;
+    return {
+      ...c,
+      enrollment_count: enrollmentCountByCourse.get(c.id) ?? 0,
+      average_rating: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
+    };
+  });
+}
 
   // ==================== MODULE MANAGEMENT ====================
 
