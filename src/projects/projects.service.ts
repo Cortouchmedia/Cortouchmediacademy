@@ -41,7 +41,22 @@ export class ProjectsService {
   // ==================== PROJECT MANAGEMENT ====================
 
   async createProject(createDto: CreateProjectDto) {
+    this.logger.log(`createProject received: ${JSON.stringify(createDto)}`);
     const supabase = this.getSupabaseClient();
+
+    // Fail fast with a clear message if required fields are missing
+    if (!createDto.course_id) {
+      throw new BadRequestException('course_id is required');
+    }
+    if (!createDto.instructor_id) {
+      throw new BadRequestException('instructor_id is required');
+    }
+    if (!createDto.title?.trim()) {
+      throw new BadRequestException('title is required');
+    }
+    if (!createDto.description?.trim()) {
+      throw new BadRequestException('description is required');
+    }
 
     const { data, error } = await supabase
       .from("projects")
