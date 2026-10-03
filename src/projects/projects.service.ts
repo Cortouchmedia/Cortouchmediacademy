@@ -221,12 +221,11 @@ export class ProjectsService {
   async submitProject(submitDto: SubmitProjectDto, files?: MulterFile[]) {
     const supabase = this.getSupabaseClient();
 
-    // Get project details
     const { data: project, error: projectError } = await supabase
-      .from("projects")
-      .select("max_submissions, due_date, title")
-      .eq("id", submitDto.project_id)
-      .single();
+    .from("projects")
+    .select("max_submissions, due_date, title, course_id")
+    .eq("id", submitDto.project_id)
+    .single();
 
     if (projectError || !project) {
       throw new NotFoundException("Project not found");
@@ -270,28 +269,46 @@ export class ProjectsService {
       }
     }
 
-    // Check if late
-    const isLate = project.due_date
-      ? new Date() > new Date(project.due_date)
-      : false;
+      // Compute the student's individual deadline:
+    // 21 days (3 weeks) after they completed the course.
+    const { data: enrollment } = await supabase
+      .from("course_enrollments")
+      .select("completed_at")
+      .eq("user_id", submitDto.student_id)
+      .eq("course_id", project.course_id)
+      .maybeSingle();
 
-    // Create submission
+    let studentDueDate: Date | null = null;
+
+    if (enrollment?.completed_at) {
+      studentDueDate = new Date(
+        new Date(enrollment.completed_at).getTime() +
+          21 * 24 * 60 * 60 * 1000, // 21 days in ms
+      );
+    } else if (project.due_date) {
+
+      studentDueDate = new Date(project.due_date);
+    }
+
+    const isLate = studentDueDate ? new Date() > studentDueDate : false;
+
     const { data: submission, error } = await supabase
-      .from("project_submissions")
-      .insert({
-        project_id: submitDto.project_id,
-        student_id: submitDto.student_id,
-        title: submitDto.title,
-        description: submitDto.description,
-        files: [...(submitDto.files || []), ...uploadedFiles],
-        submission_url: submitDto.submission_url,
-        status: "submitted",
-        submitted_at: new Date(),
-        submission_number: submissionNumber,
-        is_late: isLate,
-      })
-      .select()
-      .single();
+    .from("project_submissions")
+    .insert({
+      project_id: submitDto.project_id,
+      student_id: submitDto.student_id,
+      title: submitDto.title,
+      description: submitDto.description,
+      files: [...(submitDto.files || []), ...uploadedFiles],
+      submission_url: submitDto.submission_url,
+      status: "submitted",
+      submitted_at: new Date(),
+      submission_number: submissionNumber,
+      is_late: isLate,
+      student_due_date: studentDueDate ? studentDueDate.toISOString() : null,
+    })
+    .select()
+    .single();
 
     if (error) {
       throw new BadRequestException(
@@ -578,6 +595,52 @@ export class ProjectsService {
         D: grades.filter((g) => g >= 60 && g < 70).length,
         F: grades.filter((g) => g < 60).length,
       },
+    };
+  }
+
+  async getStudentProjectDeadline(projectId: string, studentId: string) {
+    const supabase = this.getSupabaseClient();
+  
+    // Get project + course_id
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, course_id, due_date")
+      .eq("id", projectId)
+      .single();
+  
+    if (projectError || !project) {
+      throw new NotFoundException("Project not found");
+    }
+  
+    // Get student's enrollment + completion date
+    const { data: enrollment } = await supabase
+      .from("course_enrollments")
+      .select("completed_at")
+      .eq("user_id", studentId)
+      .eq("course_id", project.course_id)
+      .maybeSingle();
+  
+    let deadline: string | null = null;
+    let source: "course_completion" | "instructor_default" | "none" = "none";
+  
+    if (enrollment?.completed_at) {
+      const d = new Date(
+        new Date(enrollment.completed_at).getTime() + 21 * 24 * 60 * 60 * 1000,
+      );
+      deadline = d.toISOString();
+      source = "course_completion";
+    } else if (project.due_date) {
+      deadline = new Date(project.due_date).toISOString();
+      source = "instructor_default";
+    }
+  
+    return {
+      project_id: projectId,
+      student_id: studentId,
+      deadline,
+      source,
+      course_completed: !!enrollment?.completed_at,
+      course_completed_at: enrollment?.completed_at ?? null,
     };
   }
 }

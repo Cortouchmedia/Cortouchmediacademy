@@ -1,4 +1,3 @@
-// src/projects/projects.controller.ts
 import {
   Controller,
   Get,
@@ -10,7 +9,6 @@ import {
   Query,
   UploadedFiles,
   UseInterceptors,
-  BadRequestException,
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { ProjectsService } from "./projects.service";
@@ -22,7 +20,6 @@ import {
   AddCommentDto,
 } from "./dto/project.dto";
 
-// Define Multer file interface locally
 interface MulterFile {
   fieldname: string;
   originalname: string;
@@ -60,39 +57,16 @@ export class ProjectsController {
     });
   }
 
-  @Get(":id")
-  async getProjectById(@Param("id") id: string) {
-    return this.projectsService.getProjectById(id);
-  }
 
-  @Put(":id")
-  async updateProject(
-    @Param("id") id: string,
-    @Query("instructorId") instructorId: string,
-    @Body() updateDto: UpdateProjectDto,
+  @Get("deadline/:projectId/:studentId")
+  async getStudentProjectDeadline(
+    @Param("projectId") projectId: string,
+    @Param("studentId") studentId: string,
   ) {
-    return this.projectsService.updateProject(id, instructorId, updateDto);
+    return this.projectsService.getStudentProjectDeadline(projectId, studentId);
   }
 
-  @Delete(":id")
-  async deleteProject(
-    @Param("id") id: string,
-    @Query("instructorId") instructorId: string,
-  ) {
-    return this.projectsService.deleteProject(id, instructorId);
-  }
-
-  // ==================== SUBMISSIONS ====================
-
-  @Post("submit")
-  @UseInterceptors(FilesInterceptor("files", 10))
-  async submitProject(
-    @UploadedFiles() files: MulterFile[],
-    @Body() submitDto: SubmitProjectDto,
-  ) {
-    return this.projectsService.submitProject(submitDto, files);
-  }
-
+  // Specific literal routes — all must come before @Get(":id")
   @Get("student/:studentId/submissions")
   async getStudentSubmissions(
     @Param("studentId") studentId: string,
@@ -114,7 +88,54 @@ export class ProjectsController {
     return this.projectsService.getSubmissionById(submissionId);
   }
 
-  // ==================== GRADING ====================
+  @Get("submissions/:submissionId/comments")
+  async getComments(@Param("submissionId") submissionId: string) {
+    return this.projectsService.getComments(submissionId);
+  }
+
+  @Get(":projectId/stats")
+  async getProjectStats(
+    @Param("projectId") projectId: string,
+    @Query("instructorId") instructorId: string,
+  ) {
+    return this.projectsService.getProjectStats(projectId, instructorId);
+  }
+
+  // ⚠️ Catch-all for project IDs — MUST be last among the GET routes.
+  @Get(":id")
+  async getProjectById(@Param("id") id: string) {
+    return this.projectsService.getProjectById(id);
+  }
+
+  // ==================== SUBMISSIONS ====================
+
+  @Post("submit")
+  @UseInterceptors(FilesInterceptor("files", 10))
+  async submitProject(
+    @UploadedFiles() files: MulterFile[],
+    @Body() submitDto: SubmitProjectDto,
+  ) {
+    return this.projectsService.submitProject(submitDto, files);
+  }
+
+  // ==================== MUTATIONS ====================
+
+  @Put(":id")
+  async updateProject(
+    @Param("id") id: string,
+    @Query("instructorId") instructorId: string,
+    @Body() updateDto: UpdateProjectDto,
+  ) {
+    return this.projectsService.updateProject(id, instructorId, updateDto);
+  }
+
+  @Delete(":id")
+  async deleteProject(
+    @Param("id") id: string,
+    @Query("instructorId") instructorId: string,
+  ) {
+    return this.projectsService.deleteProject(id, instructorId);
+  }
 
   @Put("submissions/:submissionId/grade")
   async gradeSubmission(
@@ -146,20 +167,5 @@ export class ProjectsController {
     @Body() commentDto: AddCommentDto,
   ) {
     return this.projectsService.addComment(commentDto, files);
-  }
-
-  @Get("submissions/:submissionId/comments")
-  async getComments(@Param("submissionId") submissionId: string) {
-    return this.projectsService.getComments(submissionId);
-  }
-
-  // ==================== STATISTICS ====================
-
-  @Get(":projectId/stats")
-  async getProjectStats(
-    @Param("projectId") projectId: string,
-    @Query("instructorId") instructorId: string,
-  ) {
-    return this.projectsService.getProjectStats(projectId, instructorId);
   }
 }
