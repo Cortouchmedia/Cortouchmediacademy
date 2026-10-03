@@ -1,14 +1,13 @@
-// src/projects/projects.module.ts
 import { Module } from "@nestjs/common";
 import { ProjectsController } from "./projects.controller";
 import { ProjectsService } from "./projects.service";
 import { CloudinaryModule } from "../cloudinary/cloudinarymodule";
-import { CloudinaryService } from "../cloudinary/cloudinary.service";
+import { AiAssistantModule } from "../ai/ai-assistant.module";
 
 @Module({
-  imports: [CloudinaryModule],
+  imports: [CloudinaryModule, AiAssistantModule],
   controllers: [ProjectsController],
-  providers: [ProjectsService, CloudinaryService],
+  providers: [ProjectsService],
   exports: [ProjectsService],
 })
 export class ProjectsModule {}

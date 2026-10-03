@@ -117,7 +117,13 @@ export class ProjectsController {
   ) {
     return this.projectsService.submitProject(submitDto, files);
   }
-
+  @Post("submissions/:submissionId/ai-grade")
+  async aiGradeSubmission(
+    @Param("submissionId") submissionId: string,
+    @Query("instructorId") instructorId: string,
+  ) {
+    return this.projectsService.aiGradeSubmission(submissionId, instructorId);
+  }
   // ==================== MUTATIONS ====================
 
   @Put(":id")

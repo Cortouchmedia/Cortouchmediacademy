@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
+import { AiAssistantService } from "../ai/ai-assistant.service";
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -32,6 +33,7 @@ export class ProjectsService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly aiAssistantService: AiAssistantService,
   ) {}
 
   getSupabaseClient() {
@@ -297,9 +299,9 @@ export class ProjectsService {
     .insert({
       project_id: submitDto.project_id,
       student_id: submitDto.student_id,
-      title: submitDto.title,
       description: submitDto.description,
-      files: [...(submitDto.files || []), ...uploadedFiles],
+      files: uploadedFiles,
+      screenshot_urls: uploadedFiles.map((f: any) => f.url),
       submission_url: submitDto.submission_url,
       status: "submitted",
       submitted_at: new Date(),
@@ -643,4 +645,87 @@ export class ProjectsService {
       course_completed_at: enrollment?.completed_at ?? null,
     };
   }
+
+    // ==================== AI GRADING ====================
+
+    async aiGradeSubmission(submissionId: string, instructorId: string) {
+      const supabase = this.getSupabaseClient();
+  
+      const { data: submission, error: fetchErr } = await supabase
+        .from("project_submissions")
+        .select(
+          `
+          *,
+          project:project_id(id, title, description, instructions, rubric, points_possible, instructor_id)
+        `,
+        )
+        .eq("id", submissionId)
+        .single();
+  
+      if (fetchErr || !submission) {
+        throw new NotFoundException("Submission not found");
+      }
+  
+      const project = (submission as any).project;
+      if (!project || project.instructor_id !== instructorId) {
+        throw new BadRequestException(
+          "You can only grade submissions for your own projects",
+        );
+      }
+  
+      // Mark pending
+      await supabase
+        .from("project_submissions")
+        .update({ ai_grade_status: "pending" })
+        .eq("id", submissionId);
+  
+      try {
+        const result = await this.aiAssistantService.gradeProjectSubmission({
+          projectBrief: {
+            title: project.title,
+            description: project.description,
+            instructions: project.instructions,
+            rubric: project.rubric,
+            pointsPossible: project.points_possible ?? 100,
+          },
+          studentDescription: submission.description ?? "",
+          screenshotUrls: Array.isArray(submission.screenshot_urls)
+            ? submission.screenshot_urls
+            : [],
+          submissionUrl: submission.submission_url ?? undefined,
+        });
+  
+        const { data: updated, error: updateErr } = await supabase
+          .from("project_submissions")
+          .update({
+            ai_score: result.score,
+            ai_feedback: result.feedback,
+            ai_rubric: result.rubric_breakdown,
+            ai_graded_at: new Date().toISOString(),
+            ai_grade_status: "completed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", submissionId)
+          .select()
+          .single();
+  
+        if (updateErr) {
+          throw new BadRequestException(updateErr.message);
+        }
+  
+        this.logger.log(
+          `AI graded submission ${submissionId}: ${result.score}/${project.points_possible}`,
+        );
+  
+        return { success: true, submission: updated };
+      } catch (err: any) {
+        await supabase
+          .from("project_submissions")
+          .update({ ai_grade_status: "failed" })
+          .eq("id", submissionId);
+  
+        this.logger.error(`AI grading failed: ${err.message}`);
+        throw new BadRequestException(`AI grading failed: ${err.message}`);
+      }
+    }
 }

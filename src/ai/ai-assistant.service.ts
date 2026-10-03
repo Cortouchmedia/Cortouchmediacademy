@@ -235,6 +235,146 @@ export class AiAssistantService implements OnModuleInit {
     }
   }
 
+  async gradeProjectSubmission(input: {
+    projectBrief: {
+      title: string;
+      description: string;
+      instructions?: string;
+      rubric?: any;
+      pointsPossible?: number;
+    };
+    studentDescription: string;
+    screenshotUrls: string[];
+    submissionUrl?: string;
+  }): Promise<{
+    score: number;
+    feedback: string;
+    rubric_breakdown: Array<{
+      criterion: string;
+      awarded: number;
+      max: number;
+      notes: string;
+    }>;
+  }> {
+    const points = input.projectBrief.pointsPossible ?? 100;
+
+    let prompt = `You are an expert project grader. Evaluate the student's submission below.
+
+PROJECT BRIEF
+Title: ${input.projectBrief.title}
+Description: ${input.projectBrief.description}
+${input.projectBrief.instructions ? `Instructions: ${input.projectBrief.instructions}` : ""}
+${input.projectBrief.rubric ? `Rubric: ${JSON.stringify(input.projectBrief.rubric)}` : ""}
+Points possible: ${points}
+
+STUDENT'S WRITTEN DESCRIPTION
+${input.studentDescription}
+`;
+
+    if (input.submissionUrl) {
+      prompt += `\nSUBMISSION URL\n${input.submissionUrl}\n`;
+    }
+
+    prompt += `
+You are being given ${input.screenshotUrls.length} screenshot(s) of the student's work.
+
+TASK
+Grade this submission. Be specific and reference what you actually see in the screenshots. Do not be generic.
+
+Return ONLY valid JSON, no other text, in this exact shape:
+{
+  "score": <number from 0 to ${points}>,
+  "feedback": "<2-4 paragraphs of specific, constructive feedback. Mention what was done well and what could be improved.>",
+  "rubric_breakdown": [
+    { "criterion": "<short name>", "awarded": <number>, "max": <number>, "notes": "<one sentence>" }
+  ]
+}
+`;
+
+    const parts: any[] = [{ text: prompt }];
+
+    for (const url of input.screenshotUrls.slice(0, 5)) {
+      try {
+        const imgResponse = await fetch(url);
+        if (!imgResponse.ok) {
+          this.logger.warn(`Failed to fetch image ${url}: HTTP ${imgResponse.status}`);
+          continue;
+        }
+        const arrayBuffer = await imgResponse.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        const contentType = imgResponse.headers.get("content-type") || "image/png";
+
+        parts.push({
+          inline_data: {
+            mime_type: contentType,
+            data: base64,
+          },
+        });
+      } catch (err: any) {
+        this.logger.warn(`Failed to fetch screenshot ${url}: ${err.message}`);
+      }
+    }
+
+    const modelNames = [
+      "models/gemini-2.5-flash",
+      "models/gemini-flash-latest",
+      "models/gemini-2.0-flash",
+    ];
+
+    let lastError: Error | null = null;
+
+    for (const modelName of modelNames) {
+      try {
+        this.logger.log(`Grading with model: ${modelName}`);
+
+        const url = `${this.baseUrl}/${modelName}:generateContent?key=${this.apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 4096,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          this.logger.warn(
+            `Grade model ${modelName} failed: ${response.status} ${errText}`,
+          );
+          lastError = new Error(`HTTP ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          lastError = new Error("No text from model");
+          continue;
+        }
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text);
+
+        return {
+          score: Math.max(0, Math.min(points, Number(parsed.score) || 0)),
+          feedback: String(parsed.feedback || "No feedback provided."),
+          rubric_breakdown: Array.isArray(parsed.rubric_breakdown)
+            ? parsed.rubric_breakdown
+            : [],
+        };
+      } catch (err: any) {
+        this.logger.warn(`Grade error with ${modelName}: ${err.message}`);
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error("AI grading failed for all models");
+  }
+
   // ==================== HELPER METHODS ====================
 
   private async callGeminiAPI(prompt: string): Promise<string> {

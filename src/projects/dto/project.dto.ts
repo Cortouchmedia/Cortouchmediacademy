@@ -116,20 +116,16 @@ export class SubmitProjectDto {
   student_id: string;
 
   @IsString()
-  @IsOptional()
-  title?: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @IsArray()
-  @IsOptional()
-  files?: any[];
+  @IsNotEmpty()
+  description: string;
 
   @IsString()
   @IsOptional()
   submission_url?: string;
+
+  @IsArray()
+  @IsOptional()
+  files?: any[];
 }
 
 export class GradeSubmissionDto {
