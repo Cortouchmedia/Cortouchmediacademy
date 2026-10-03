@@ -316,9 +316,8 @@ Return ONLY valid JSON, no other text, in this exact shape:
     }
 
     const modelNames = [
-      "models/gemini-2.5-flash",
-      "models/gemini-flash-latest",
-      "models/gemini-2.0-flash",
+      "models/gemini-3.8-flash",        
+      "models/gemini-flash-latest",   
     ];
 
     let lastError: Error | null = null;
@@ -380,10 +379,8 @@ Return ONLY valid JSON, no other text, in this exact shape:
   private async callGeminiAPI(prompt: string): Promise<string> {
     // Try different model names (order by preference)
     const modelNames = [
-      "models/gemini-2.5-flash", // Best balance of speed/quality
-      "models/gemini-flash-latest", // Latest flash model
-      "models/gemini-2.0-flash", // Fast and reliable
-      "models/gemini-2.5-pro", // Most capable (slower)
+      "models/gemini-3.8-flash",        // current generation
+      "models/gemini-flash-latest",     // fallback alias
     ];
 
     let lastError: Error | null = null;
