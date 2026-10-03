@@ -276,20 +276,26 @@ ${input.studentDescription}
     }
 
     prompt += `
-You are being given ${input.screenshotUrls.length} screenshot(s) of the student's work.
-
-TASK
-Grade this submission. Be specific and reference what you actually see in the screenshots. Do not be generic.
-
-Return ONLY valid JSON, no other text, in this exact shape:
-{
-  "score": <number from 0 to ${points}>,
-  "feedback": "<2-4 paragraphs of specific, constructive feedback. Mention what was done well and what could be improved.>",
-  "rubric_breakdown": [
-    { "criterion": "<short name>", "awarded": <number>, "max": <number>, "notes": "<one sentence>" }
-  ]
-}
-`;
+    You are being given ${input.screenshotUrls.length} screenshot(s) of the student's work.
+    
+    TASK
+    Grade this submission. Reference what you actually see in the screenshots.
+    
+    IMPORTANT OUTPUT CONSTRAINTS:
+    - Total response must be under 400 words.
+    - "feedback": 2 short paragraphs, max 120 words total. No long essays.
+    - "rubric_breakdown": max 4 criteria, one sentence each.
+    - Keep everything compact so the JSON does not get truncated.
+    
+    Return ONLY valid JSON, no other text, in this exact shape:
+    {
+      "score": <number from 0 to ${points}>,
+      "feedback": "<2 short paragraphs, max 120 words>",
+      "rubric_breakdown": [
+        { "criterion": "<short name>", "awarded": <number>, "max": <number>, "notes": "<one short sentence>" }
+      ]
+    }
+    `;
 
     const parts: any[] = [{ text: prompt }];
 
@@ -334,7 +340,7 @@ Return ONLY valid JSON, no other text, in this exact shape:
             contents: [{ parts }],
             generationConfig: {
               temperature: 0.4,
-              maxOutputTokens: 4096,
+              maxOutputTokens: 8192,
             },
           }),
         });
@@ -355,16 +361,48 @@ Return ONLY valid JSON, no other text, in this exact shape:
           continue;
         }
 
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text);
-
-        return {
-          score: Math.max(0, Math.min(points, Number(parsed.score) || 0)),
-          feedback: String(parsed.feedback || "No feedback provided."),
-          rubric_breakdown: Array.isArray(parsed.rubric_breakdown)
-            ? parsed.rubric_breakdown
-            : [],
-        };
+                // 1. Strip markdown fences if present
+                let cleanText = text.trim();
+                if (cleanText.startsWith("```")) {
+                  cleanText = cleanText
+                    .replace(/^```(?:json)?\s*/i, "")
+                    .replace(/\s*```\s*$/, "")
+                    .trim();
+                }
+        
+                // 2. Try strict parse first, then fall back to regex extraction
+                let parsed: any = null;
+                try {
+                  parsed = JSON.parse(cleanText);
+                } catch {
+                  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) {
+                    try {
+                      parsed = JSON.parse(jsonMatch[0]);
+                    } catch (innerErr: any) {
+                      this.logger.warn(
+                        `JSON regex fallback also failed: ${innerErr.message}`,
+                      );
+                    }
+                  }
+                }
+        
+                // 3. If we still don't have valid JSON, log the raw response for debugging
+                if (!parsed || typeof parsed !== "object") {
+                  this.logger.warn(
+                    `Model returned non-JSON output (length ${text.length}). First 500 chars: ${text.substring(0, 500)}`,
+                  );
+                  lastError = new Error("Model returned non-JSON output");
+                  continue;
+                }
+        
+                return {
+                  score: Math.max(0, Math.min(points, Number(parsed.score) || 0)),
+                  feedback: String(parsed.feedback || "No feedback provided."),
+                  rubric_breakdown: Array.isArray(parsed.rubric_breakdown)
+                    ? parsed.rubric_breakdown
+                    : [],
+                };
       } catch (err: any) {
         this.logger.warn(`Grade error with ${modelName}: ${err.message}`);
         lastError = err;
