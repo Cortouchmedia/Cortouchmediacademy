@@ -279,22 +279,55 @@ ${input.studentDescription}
     You are being given ${input.screenshotUrls.length} screenshot(s) of the student's work.
     
     TASK
-    Grade this submission. Reference what you actually see in the screenshots.
+    Grade this submission against the six criteria below. Every criterion must reference something specific from the brief, the student's description, or the screenshots. Do not invent facts you cannot see.
     
-    IMPORTANT OUTPUT CONSTRAINTS:
-    - Total response must be under 400 words.
-    - "feedback": 2 short paragraphs, max 120 words total. No long essays.
-    - "rubric_breakdown": max 4 criteria, one sentence each.
-    - Keep everything compact so the JSON does not get truncated.
+    EVALUATION CRITERIA (score each, then sum for the total):
     
-    Return ONLY valid JSON, no other text, in this exact shape:
+    1. Completeness (max 25 pts)
+       Cross-check the PROJECT BRIEF above against what's visible in the screenshots. List every requirement from the brief and state whether each one is met. Award points proportionally.
+    
+    2. Correctness (max 25 pts)
+       Does the work appear to function correctly? Look for visible errors, broken layouts, missing states, contradictions with the brief, or unfinished sections.
+    
+    3. Quality (max 20 pts)
+       Is the work polished and well-structured? Consider visual design, code organization (if code is shown), spacing, attention to detail.
+    
+    4. Student's Description (max 15 pts)
+       Did the student clearly explain their approach and challenges? Reward thoughtful, specific write-ups. Penalize vague or one-line descriptions.
+    
+    5. Screenshot Evidence (max 10 pts)
+       Do the screenshots clearly show the finished work? Reward well-lit, relevant, complete captures. Penalize blurry, partial, or off-topic screenshots.
+    
+    6. Instructions Adherence (max 5 pts)
+       Did the student follow the specific instructions in the brief (format, submission method, stated constraints)?
+    
+    RULES
+    - Do not award a score without explaining WHY in "notes". Reference specific things you can see.
+    - If a criterion cannot be judged from the screenshots or the description, say so explicitly in "notes" and award a neutral (mid-range) score for that criterion only.
+    - Be honest. A weak submission should score low.
+    - Total feedback must stay under 400 words.
+    
+    BAD FEEDBACK (do NOT write like this):
+    "The student did a good job. The work looks nice but could be improved."
+    
+    GOOD FEEDBACK (write like this):
+    "The student completed all three requirements from the brief: user login, dashboard view, and logout flow. The login screen (screenshot 1) is clean and well-spaced, and the dashboard (screenshot 2) shows the correct data. The mobile layout in screenshot 3 breaks at the 380px breakpoint though — the sidebar overlaps the main content. The description explains the approach but doesn't mention any challenges, which loses points under criterion 4."
+    
+    Return ONLY valid JSON, no other text, matching this exact shape:
     {
-      "score": <number from 0 to ${points}>,
-      "feedback": "<2 short paragraphs, max 120 words>",
+      "score": <sum of criterion scores, scaled so the maximum is ${points}>,
+      "feedback": "<2 short paragraphs, max 120 words. Open with what the student did well, then 1-2 specific improvements.>",
       "rubric_breakdown": [
-        { "criterion": "<short name>", "awarded": <number>, "max": <number>, "notes": "<one short sentence>" }
+        { "criterion": "Completeness", "awarded": <0-25>, "max": 25, "notes": "<one short sentence referencing specific requirements from the brief>" },
+        { "criterion": "Correctness", "awarded": <0-25>, "max": 25, "notes": "<one short sentence>" },
+        { "criterion": "Quality", "awarded": <0-20>, "max": 20, "notes": "<one short sentence>" },
+        { "criterion": "Student's Description", "awarded": <0-15>, "max": 15, "notes": "<one short sentence>" },
+        { "criterion": "Screenshot Evidence", "awarded": <0-10>, "max": 10, "notes": "<one short sentence>" },
+        { "criterion": "Instructions Adherence", "awarded": <0-5>, "max": 5, "notes": "<one short sentence>" }
       ]
     }
+    
+    SCALING: The six criteria total 100. If points_possible is ${points} and that is not 100, scale the "score" field proportionally so it stays within 0 to ${points}. The rubric_breakdown values should ALWAYS use the maximums shown above (25, 25, 20, 15, 10, 5) — do not scale them.
     `;
 
     const parts: any[] = [{ text: prompt }];
@@ -339,7 +372,7 @@ ${input.studentDescription}
           body: JSON.stringify({
             contents: [{ parts }],
             generationConfig: {
-              temperature: 0.4,
+              temperature: 0.2,
               maxOutputTokens: 8192,
             },
           }),
