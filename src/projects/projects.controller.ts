@@ -124,6 +124,19 @@ export class ProjectsController {
   ) {
     return this.projectsService.aiGradeSubmission(submissionId, instructorId);
   }
+
+  @Get("instructor/:instructorId/submissions")
+  async getInstructorSubmissions(
+    @Param("instructorId") instructorId: string,
+    @Query("status") status?: 'pending' | 'graded' | 'all',
+    @Query("courseId") courseId?: string,
+  ) {
+    return this.projectsService.getInstructorSubmissions(instructorId, {
+      status,
+      courseId,
+    });
+  }
+  
   // ==================== MUTATIONS ====================
 
   @Put(":id")

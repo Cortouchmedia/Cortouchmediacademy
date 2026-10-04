@@ -403,6 +403,134 @@ export class ProjectsService {
     return data || [];
   }
 
+    /**
+   * Returns all submissions across the instructor's projects.
+   * Sorted oldest-first so the grading queue surfaces what's been waiting longest.
+   */
+     async getInstructorSubmissions(
+      instructorId: string,
+      filters?: { status?: 'pending' | 'graded' | 'all'; courseId?: string },
+    ) {
+      const supabase = this.getSupabaseClient();
+  
+      // 1. Get all courses owned by this instructor
+      const { data: courses, error: coursesErr } = await supabase
+        .from("courses")
+        .select("id, title")
+        .eq("instructor_id", instructorId);
+  
+      if (coursesErr) {
+        throw new BadRequestException(
+          `Failed to fetch instructor courses: ${coursesErr.message}`,
+        );
+      }
+  
+      if (!courses || courses.length === 0) {
+        return { submissions: [], counts: { pending: 0, graded: 0, total: 0 } };
+      }
+  
+      const courseIds = courses.map((c) => c.id);
+      const courseById = new Map(courses.map((c) => [c.id, c]));
+  
+      // 2. Get all projects in those courses
+      const { data: projects, error: projErr } = await supabase
+        .from("projects")
+        .select("id, title, course_id")
+        .in("course_id", courseIds);
+  
+      if (projErr) {
+        throw new BadRequestException(
+          `Failed to fetch projects: ${projErr.message}`,
+        );
+      }
+  
+      if (!projects || projects.length === 0) {
+        return { submissions: [], counts: { pending: 0, graded: 0, total: 0 } };
+      }
+  
+      // Optional filter: restrict to one course
+      const filteredProjects = filters?.courseId
+        ? projects.filter((p) => p.course_id === filters.courseId)
+        : projects;
+  
+      const projectIds = filteredProjects.map((p) => p.id);
+      const projectById = new Map(filteredProjects.map((p) => [p.id, p]));
+  
+      if (projectIds.length === 0) {
+        return { submissions: [], counts: { pending: 0, graded: 0, total: 0 } };
+      }
+  
+      // 3. Fetch all submissions for those projects
+      const { data: submissions, error: subErr } = await supabase
+        .from("project_submissions")
+        .select("*")
+        .in("project_id", projectIds)
+        .order("submitted_at", { ascending: true }); // oldest first
+  
+      if (subErr) {
+        throw new BadRequestException(
+          `Failed to fetch submissions: ${subErr.message}`,
+        );
+      }
+  
+      const raw = submissions || [];
+  
+      // 4. Fetch the student profiles for all these submissions
+      const userIds = [...new Set(raw.map((s) => s.student_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .in("id", userIds);
+  
+      const profileById = new Map((profiles || []).map((p) => [p.id, p]));
+  
+      // 5. Compose the enriched rows
+      const enriched = raw.map((s) => {
+        const project = projectById.get(s.project_id);
+        const course = project ? courseById.get(project.course_id) : null;
+  
+        return {
+          id: s.id,
+          status: s.status,
+          grade: s.grade,
+          feedback: s.feedback,
+          ai_score: s.ai_score,
+          ai_feedback: s.ai_feedback,
+          ai_rubric: s.ai_rubric,
+          ai_grade_status: s.ai_grade_status,
+          is_late: s.is_late,
+          submitted_at: s.submitted_at,
+          description: s.description,
+          screenshot_urls: s.screenshot_urls,
+          submission_url: s.submission_url,
+          student: profileById.get(s.student_id) ?? null,
+          project: project
+            ? { id: project.id, title: project.title, course_id: project.course_id }
+            : null,
+          course: course
+            ? { id: course.id, title: course.title }
+            : null,
+        };
+      });
+  
+      // 6. Compute counts before filtering, so the badge always shows the true pending count
+      const counts = {
+        pending: enriched.filter((s) => s.status !== "graded").length,
+        graded: enriched.filter((s) => s.status === "graded").length,
+        total: enriched.length,
+      };
+  
+      // 7. Apply status filter
+      let visible = enriched;
+      if (filters?.status === 'pending') {
+        visible = enriched.filter((s) => s.status !== "graded");
+      } else if (filters?.status === 'graded') {
+        visible = enriched.filter((s) => s.status === "graded");
+      }
+  
+      return { submissions: visible, counts };
+    }
+
   async getSubmissionById(submissionId: string) {
     const supabase = this.getSupabaseClient();
 
