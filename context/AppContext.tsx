@@ -48,7 +48,6 @@ interface AppContextType {
   handleEnrollmentSuccess: (courseId: number | string) => Promise<void>;
   handleToggleLessonComplete: (courseId: number | string, lessonId: number | string) => void;
   handleLessonProgressToggle: (lessonId: string | number, isCompleted: boolean) => Promise<void>;
-  handleProjectSubmit: (courseId: number | string, projectId: number | string, submissionLink: string) => Promise<void>;
   handleSendMessage: (text: string) => Promise<void>;
   handleSendCourseMessage: (courseId: number | string, text: string) => Promise<void>;
   logAuditEvent: (action: string, details: string, type: AuditLog['type']) => void;
@@ -74,6 +73,35 @@ interface AppContextType {
   handleWebinarAdd: (courseId: number | string, webinarData: Omit<Webinar, 'id'>) => void;
   handleWebinarDelete: (courseId: number | string, webinarId: number | string) => void;
   handleWebinarRegister: (webinarId: string | number) => Promise<void>;
+  handleProjectAdd: (
+    courseId: number | string,
+    projectData: {
+      title: string;
+      description: string;
+      instructions?: string;
+      dueDate?: string;
+      maxSubmissions?: number;
+      pointsPossible?: number;
+    },
+  ) => Promise<void>;
+
+  handleProjectDelete: (
+    courseId: number | string,
+    projectId: number | string,
+  ) => Promise<void>;
+  handleProjectSubmitWithFiles: (
+    courseId: number | string,
+    projectId: number | string,
+    data: { description: string; submissionUrl?: string; screenshots: File[] },
+  ) => Promise<void>;
+  handleAIGrade: (
+    submissionId: string,
+  ) => Promise<{ score: number; feedback: string; rubric: any[] }>;
+  handleApproveGrade: (
+    submissionId: string,
+    grade: number,
+    feedback: string,
+  ) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -121,7 +149,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsHydrated(true);
   }, []);
 
-  // Persist currentUser
+ 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (currentUser) {
@@ -174,66 +202,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   };
  
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!isLoggedIn || !currentUser?.id) return;
-    const token = authStorage.getToken();
-    if (!token) return;
+useEffect(() => {
+  if (typeof window === 'undefined') return;
 
-    let cancelled = false;
+  let cancelled = false;
 
-    (async () => {
-      try {
-      
-        const coursesData: any = await Api.courses.list();
-        const courseList = Array.isArray(coursesData)
-          ? coursesData
-          : coursesData?.data ?? coursesData?.courses ?? [];
-        const normalizedCourses = courseList.map(normalizeCourse);
+  (async () => {
+    try {
+      const coursesData: any = await Api.courses.list();
+      const courseList = Array.isArray(coursesData)
+        ? coursesData
+        : coursesData?.data ?? coursesData?.courses ?? [];
+      const normalizedCourses = courseList.map(normalizeCourse);
+      if (!cancelled) setCourses(normalizedCourses);
+    } catch (err) {
+      console.error('Failed to load courses:', err);
+      if (!cancelled) setCourses([]);
+    }
+  })();
 
-        
-        const enrollmentsData: any = await Api.courses.userEnrollments(
-          currentUser.id,
-          token,
-        );
-        const enrollList = Array.isArray(enrollmentsData)
-          ? enrollmentsData
-          : enrollmentsData?.data ?? [];
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
-        const enrolledIds = enrollList.map((e: any) => String(e.course_id));
-        const meta: Record<string, { progress: number; completed: boolean }> =
-          {};
-        enrollList.forEach((e: any) => {
-          const cid = String(e.course_id);
-          const pct = Math.round(Number(e.progress_percentage ?? 0));
-          meta[cid] = {
-            progress: pct,
-            completed: pct >= 100 || !!e.completed_at,
-          };
-        });
+// ---- Effect 2: when signed in, overlay progress + enrollment ----
+useEffect(() => {
+  if (typeof window === 'undefined') return;
+  if (!isLoggedIn || !currentUser?.id) return;
+  const token = authStorage.getToken();
+  if (!token) return;
 
-      
-        const coursesWithProgress = normalizedCourses.map((c: any) => {
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const enrollmentsData: any = await Api.courses.userEnrollments(
+        currentUser.id,
+        token,
+      );
+      const enrollList = Array.isArray(enrollmentsData)
+        ? enrollmentsData
+        : enrollmentsData?.data ?? [];
+
+      const enrolledIds = enrollList.map((e: any) => String(e.course_id));
+      const meta: Record<string, { progress: number; completed: boolean }> = {};
+      enrollList.forEach((e: any) => {
+        const cid = String(e.course_id);
+        const pct = Math.round(Number(e.progress_percentage ?? 0));
+        meta[cid] = {
+          progress: pct,
+          completed: pct >= 100 || !!e.completed_at,
+        };
+      });
+
+      if (cancelled) return;
+
+      setCourses((prev) =>
+        prev.map((c) => {
           const m = meta[String(c.id)];
           return m ? { ...c, progress: m.progress, completed: m.completed } : c;
-        });
+        }),
+      );
 
-        if (cancelled) return;
+      setCurrentUser((prev) =>
+        prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
+      );
+    } catch (err) {
+      console.error('Failed to load enrollments:', err);
+    }
+  })();
 
-        setCourses(coursesWithProgress);
-        setCurrentUser((prev) =>
-          prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
-        );
-      } catch (err) {
-        console.error('Failed to load courses/enrollments:', err);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn, currentUser?.id]);
-
+  return () => {
+    cancelled = true;
+  };
+}, [isLoggedIn, currentUser?.id]);
 
 useEffect(() => {
   if (!selectedCourse) return;
@@ -267,6 +310,31 @@ useEffect(() => {
         ? allCourses
         : allCourses?.data ?? allCourses?.courses ?? [];
       const normalized = list.map(normalizeCourse);
+
+      // Fetch projects and attach them to their courses
+      const token = authStorage.getToken();
+      if (token) {
+        try {
+          const projectsRes: any = await Api.projects.list();
+          const projectList = Array.isArray(projectsRes)
+            ? projectsRes
+            : projectsRes?.projects ?? [];
+
+          const projectsByCourse = new Map<string, any[]>();
+          projectList.forEach((p: any) => {
+            const cid = String(p.course_id);
+            if (!projectsByCourse.has(cid)) projectsByCourse.set(cid, []);
+            projectsByCourse.get(cid)!.push(p);
+          });
+
+          normalized.forEach((c: any) => {
+            c.projects = projectsByCourse.get(String(c.id)) ?? [];
+          });
+        } catch (err) {
+          console.warn('Failed to fetch projects:', err);
+        }
+      }
+
       setCourses(normalized);
       return normalized;
     } catch (err) {
@@ -518,54 +586,7 @@ useEffect(() => {
     }
   };
 
-  const handleProjectSubmit = async (
-    courseId: number | string,
-    projectId: number | string,
-    submissionLink: string,
-  ) => {
-    setCourses((prev) =>
-      prev.map((course) => {
-        if (String(course.id) === String(courseId)) {
-          const updatedProjects = course.projects.map((p) =>
-            String(p.id) === String(projectId)
-              ? { ...p, isGrading: true, submissionLink }
-              : p,
-          );
-          const updated = { ...course, projects: updatedProjects };
-          if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
-          return updated;
-        }
-        return course;
-      }),
-    );
-  
-    setTimeout(() => {
-      setCourses((prev) =>
-        prev.map((course) => {
-          if (String(course.id) === String(courseId)) {
-            const updatedProjects = course.projects.map((p) => {
-              if (String(p.id) === String(projectId)) {
-                const score = Math.floor(Math.random() * 21) + 80;
-                return {
-                  ...p,
-                  isSubmitted: true,
-                  isGrading: false,
-                  score,
-                  feedback: `Great job! Score: ${score}%`,
-                };
-              }
-              return p;
-            });
-            const updated = { ...course, projects: updatedProjects };
-            if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
-            return updated;
-          }
-          return course;
-        }),
-      );
-      logAuditEvent('Project Submitted', `Project ${projectId} submitted for course ${courseId}`, 'course');
-    }, 2000);
-  };
+ 
 
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
@@ -599,40 +620,69 @@ useEffect(() => {
     }
   };
 
-  const handleSendCourseMessage = async (courseId: number | string, text: string) => {
+  const handleSendCourseMessage = async (
+    courseId: number | string,
+    text: string,
+  ) => {
     const userMsg: ChatMessage = {
       id: Date.now(),
       text,
       sender: 'user',
-      timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
+      timestamp: new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date()),
     };
+
     setCourses((prev) =>
       prev.map((course) => {
         if (String(course.id) === String(courseId)) {
-          const updated = { ...course, chatHistory: [...(course.chatHistory || []), userMsg], isAssistantTyping: true };
-          if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+          const updated = {
+            ...course,
+            chatHistory: [...(course.chatHistory || []), userMsg],
+            isAssistantTyping: true,
+          };
+          if (String(selectedCourse?.id) === String(courseId))
+            setSelectedCourse(updated);
           return updated;
         }
         return course;
       }),
     );
+
     try {
-      let responseText = "I'm here to help. What would you like to know?";
-      if (ai) {
-        const course = courses.find((c) => String(c.id) === String(courseId));
-        const prompt = `You are a teaching assistant for "${course?.title}". Student asks: ${text}`;
-        const result = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-        responseText = result.text || "I couldn't generate a response.";
-      }
+      // Route through the backend — it has the correct model rotation,
+      // course-content context, and server-side API key handling.
+      const res: any = await Api.ai.ask({
+        question: text,
+        course_id: String(courseId),
+        user_id: currentUser?.id,
+      });
+
+      const responseText =
+        res?.answer ?? res?.response ?? "I couldn't generate a response.";
+
       setCourses((prev) =>
         prev.map((course) => {
           if (String(course.id) === String(courseId)) {
             const updated = {
               ...course,
-              chatHistory: [...(course.chatHistory || []), { id: Date.now() + 1, text: responseText, sender: 'bot' as const, timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }],
+              chatHistory: [
+                ...(course.chatHistory || []),
+                {
+                  id: Date.now() + 1,
+                  text: responseText,
+                  sender: 'bot' as const,
+                  timestamp: new Intl.DateTimeFormat('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }).format(new Date()),
+                },
+              ],
               isAssistantTyping: false,
             };
-            if (String(selectedCourse?.id) === String(courseId)) setSelectedCourse(updated);
+            if (String(selectedCourse?.id) === String(courseId))
+              setSelectedCourse(updated);
             return updated;
           }
           return course;
@@ -645,7 +695,19 @@ useEffect(() => {
           if (String(course.id) === String(courseId)) {
             return {
               ...course,
-              chatHistory: [...(course.chatHistory || []), { id: Date.now() + 2, text: 'Error. Try again.', sender: 'bot' as const, timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) }],
+              chatHistory: [
+                ...(course.chatHistory || []),
+                {
+                  id: Date.now() + 2,
+                  text:
+                    'Sorry, the AI assistant is temporarily unavailable. Please try again.',
+                  sender: 'bot' as const,
+                  timestamp: new Intl.DateTimeFormat('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }).format(new Date()),
+                },
+              ],
               isAssistantTyping: false,
             };
           }
@@ -845,6 +907,115 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     logAuditEvent('Webinar Registered', `Registered for webinar ${webinarId}`, 'user');
   };
 
+  const handleProjectAdd = async (
+    courseId: number | string,
+    projectData: {
+      title: string;
+      description: string;
+      instructions?: string;
+      dueDate?: string;
+      maxSubmissions?: number;
+      pointsPossible?: number;
+    },
+  ): Promise<void> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+
+    await Api.projects.create(
+      {
+        course_id: String(courseId),
+        instructor_id: currentUser.id,
+        title: projectData.title,
+        description: projectData.description,
+        instructions: projectData.instructions,
+        due_date: projectData.dueDate,
+        max_submissions: projectData.maxSubmissions,
+        points_possible: projectData.pointsPossible,
+      },
+      token,
+    );
+
+    await refreshCourses();
+    logAuditEvent('Project Added', `Added project "${projectData.title}"`, 'course');
+  };
+
+  const handleProjectDelete = async (
+    courseId: number | string,
+    projectId: number | string,
+  ): Promise<void> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+
+    await Api.projects.delete(String(projectId), currentUser.id, token);
+    await refreshCourses();
+    logAuditEvent('Project Deleted', `Deleted project ${projectId}`, 'course');
+  };
+
+  const handleProjectSubmitWithFiles = async (
+    courseId: number | string,
+    projectId: number | string,
+    data: { description: string; submissionUrl?: string; screenshots: File[] },
+  ): Promise<void> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+
+    await Api.projects.submitWithFiles(
+      String(projectId),
+      currentUser.id,
+      data.description,
+      data.screenshots,
+      data.submissionUrl,
+      token,
+    );
+
+    await refreshCourses();
+    logAuditEvent(
+      'Project Submitted',
+      `Submitted project ${projectId} with ${data.screenshots.length} screenshot(s)`,
+      'course',
+    );
+  };
+
+  const handleAIGrade = async (
+    submissionId: string,
+  ): Promise<{ score: number; feedback: string; rubric: any[] }> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+
+    const res = await Api.projects.aiGrade(submissionId, currentUser.id, token);
+    return {
+      score: Number(res?.submission?.ai_score ?? 0),
+      feedback: String(res?.submission?.ai_feedback ?? ''),
+      rubric: res?.submission?.ai_rubric ?? [],
+    };
+  };
+
+  const handleApproveGrade = async (
+    submissionId: string,
+    grade: number,
+    feedback: string,
+  ): Promise<void> => {
+    if (!currentUser) throw new Error('Not signed in');
+    const token = authStorage.getToken();
+    if (!token) throw new Error('Not signed in');
+
+    await Api.projects.approveGrade(
+      submissionId,
+      { grade, feedback, instructor_id: currentUser.id },
+      token,
+    );
+
+    logAuditEvent(
+      'Grade Approved',
+      `Approved grade ${grade} for submission ${submissionId}`,
+      'course',
+    );
+  };
+
   const handleInstructorMessageSend = (studentId: string, text: string) => {
     if (!currentUser) return;
     const newMessage: InstructorMessage = {
@@ -879,11 +1050,13 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     setCompletedCourse, setIsChatOpen, setIsBotTyping, setMessages, setSearchQuery, setLanguage,
     handleLogin, handleLogout, handleNavigate, handleCourseSelect, handleSearchChange,
     handleUserUpdate, handleUserDelete, handleUserAdd,
-    handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle, handleProjectSubmit,
+    handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle,
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
     handleCourseUpdate, handleCourseDelete, handleModuleAdd, handleLessonAdd, handleLessonDelete,
     handleWebinarAdd, handleWebinarDelete, handleWebinarRegister,
+    handleProjectAdd, handleProjectDelete,
+    handleProjectSubmitWithFiles, handleAIGrade, handleApproveGrade,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -10,8 +10,7 @@ export default function CourseDetailsPage() {
   const router = useRouter();
   const { courses } = useAppContext();
   
-  const courseId = parseInt(params.id as string);
-  const course = courses.find(c => c.id === courseId);
+  const course = courses.find(c => String(c.id) === String(params.id));
 
   if (!course) {
     return (

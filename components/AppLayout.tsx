@@ -34,6 +34,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       else if (path === 'instructor-courses') handleNavigate('Instructor Courses');
       else if (path === 'instructor-students') handleNavigate('Instructor Students');
       else if (path === 'instructor-revenue') handleNavigate('Instructor Revenue');
+      else if (path === 'instructor-submissions') handleNavigate('Instructor Submissions');
       else if (path === 'catalog') handleNavigate('Catalog');
       else if (path === 'my-courses') handleNavigate('My Courses');
       else if (path === 'certificates') handleNavigate('Certificates');

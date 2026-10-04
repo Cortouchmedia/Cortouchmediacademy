@@ -312,18 +312,21 @@ assets: {
      api.get(`/payments/user/${userId}/transactions`, token),
  },
 
- // AI Assistant
- ai: {
-   health: () => api.get('/ai/health'),
-   ask: (body: { question: string; context?: string }) =>
-     api.post('/ai/ask', body),
-   quiz: (body: { topic: string; difficulty?: string; count?: number }) =>
-     api.post('/ai/quiz/generate', body),
-   explain: (body: { topic: string; level?: string }) =>
-     api.post('/ai/explain', body),
-   summary: (body: { text: string }) =>
-     api.post('/ai/summary', body),
- },
+  // AI Assistant
+  ai: {
+    health: () => api.get('/ai/health'),
+    ask: (body: { question: string; course_id?: string; user_id?: string }) =>
+      api.post<{ success: boolean; question: string; answer: string }>(
+        '/ai/ask',
+        body,
+      ),
+    quiz: (body: { course_id?: string; topic: string; difficulty?: string; num_questions?: number }) =>
+      api.post('/ai/quiz/generate', body),
+    explain: (body: { concept: string; course_id?: string; level?: string }) =>
+      api.post('/ai/explain', body),
+    summary: (body: { course_id: string }) =>
+      api.post('/ai/summary', body),
+  },
 
  // Webinars
  webinars: {
@@ -339,27 +342,224 @@ assets: {
      api.post('/webinars/feedback', body, token),
  },
 
- // Forum
- forum: {
-   categories: () => api.get('/forum/categories'),
-   topics: () => api.get('/forum/topics'),
-   getTopic: (id: string) => api.get(`/forum/topics/${id}`),
-   createTopic: (body: unknown, token: string) =>
-     api.post('/forum/topics', body, token),
-   replies: (topicId: string) =>
-     api.get(`/forum/topics/${topicId}/replies`),
- },
+// Forum
+forum: {
+  categories: () => api.get('/forum/categories'),
 
- // Projects
- projects: {
-   list: () => api.get('/projects'),
-   get: (id: string) => api.get(`/projects/${id}`),
-   submit: (body: unknown, token: string) =>
-     api.post('/projects/submit', body, token),
-   studentSubmissions: (studentId: string, token?: string) =>
-     api.get(`/projects/student/${studentId}/submissions`, token),
- },
+  topics: (filters?: { category_id?: string; sort?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.category_id) params.set('category_id', filters.category_id);
+    if (filters?.sort) params.set('sort', filters.sort);
+    const qs = params.toString();
+    return api.get<{
+      topics: Array<{
+        id: string;
+        title: string;
+        content?: string;
+        user?: {
+          id: string;
+          full_name: string | null;
+          profile_picture: string | null;
+        } | null;
+        category?: { name: string; slug: string } | null;
+        reply_count?: number;
+        view_count?: number;
+        like_count?: number;
+        created_at: string;
+      }>;
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/forum/topics${qs ? `?${qs}` : ''}`);
+  },
 
+  // token is optional: anonymous users get user_has_liked: false
+  getTopic: (id: string, token?: string) =>
+    api.get<{
+      id: string;
+      title: string;
+      content?: string;
+      user?: any;
+      category?: any;
+      replies: Array<{
+        id: string;
+        content: string;
+        user_id: string;
+        user?: {
+          id: string;
+          full_name: string | null;
+          profile_picture: string | null;
+        } | null;
+        created_at: string;
+      }>;
+      reply_count: number;
+      view_count: number;
+      like_count: number;
+      user_has_liked?: boolean;
+      created_at: string;
+    }>(`/forum/topics/${id}`, token),
+
+  createTopic: (
+    body: { title: string; content?: string; category_id?: string },
+    token: string,
+  ) => api.post('/forum/topics', body, token),
+
+  createReply: (
+    topicId: string,
+    body: { content: string },
+    token: string,
+  ) => api.post(`/forum/topics/${topicId}/replies`, body, token),
+
+  likeTopic: (topicId: string, token: string) =>
+    api.post(`/forum/topics/${topicId}/like`, {}, token),
+
+  bookmarkTopic: (topicId: string, token: string) =>
+    api.post(`/forum/topics/${topicId}/bookmark`, {}, token),
+
+  bookmarks: (userId: string, token: string) =>
+    api.get(`/forum/users/${userId}/bookmarks`, token),
+},
+
+   projects: {
+    list: (filters?: {
+      course_id?: string;
+      instructor_id?: string;
+      is_active?: boolean;
+    }) => {
+      const params = new URLSearchParams();
+      if (filters?.course_id) params.set('course_id', filters.course_id);
+      if (filters?.instructor_id) params.set('instructor_id', filters.instructor_id);
+      if (filters?.is_active !== undefined)
+        params.set('is_active', String(filters.is_active));
+      const qs = params.toString();
+      return api.get(`/projects${qs ? `?${qs}` : ''}`);
+    },
+    get: (id: string) => api.get(`/projects/${id}`),
+    create: (
+      body: {
+        course_id: string;
+        instructor_id: string;
+        title: string;
+        description: string;
+        instructions?: string;
+        requirements?: any[];
+        due_date?: string;
+        max_submissions?: number;
+        points_possible?: number;
+        rubric?: any;
+      },
+      token: string,
+    ) => api.post('/projects', body, token),
+    delete: (id: string, instructorId: string, token: string) =>
+      api.delete(`/projects/${id}?instructorId=${instructorId}`, token),
+    deadline: (projectId: string, studentId: string, token?: string) =>
+      api.get<{
+        project_id: string;
+        student_id: string;
+        deadline: string | null;
+        source: 'course_completion' | 'instructor_default' | 'none';
+        course_completed: boolean;
+        course_completed_at: string | null;
+      }>(`/projects/deadline/${projectId}/${studentId}`, token),
+
+    submitWithFiles: (
+      projectId: string,
+      studentId: string,
+      description: string,
+      screenshots: File[],
+      submissionUrl: string | undefined,
+      token: string,
+    ) => {
+      const fd = new FormData();
+      fd.append('project_id', projectId);
+      fd.append('student_id', studentId);
+      fd.append('description', description);
+      if (submissionUrl) fd.append('submission_url', submissionUrl);
+      screenshots.forEach((file) => fd.append('files', file));
+      return apiUpload<{
+        success: boolean;
+        message: string;
+        submission: any;
+        isLate: boolean;
+      }>('/projects/submit', fd, token);
+    },
+
+    projectSubmissions: (
+      projectId: string,
+      instructorId: string,
+      token: string,
+    ) =>
+      api.get<Array<any>>(
+        `/projects/project/${projectId}/submissions?instructorId=${instructorId}`,
+        token,
+      ),
+
+    aiGrade: (submissionId: string, instructorId: string, token: string) =>
+      api.post<{ success: boolean; submission: any }>(
+        `/projects/submissions/${submissionId}/ai-grade?instructorId=${instructorId}`,
+        {},
+        token,
+      ),
+
+
+      instructorSubmissions: (
+        instructorId: string,
+        options: { status?: 'pending' | 'graded' | 'all'; courseId?: string } = {},
+        token?: string,
+      ) => {
+        const params = new URLSearchParams();
+        if (options.status && options.status !== 'all') {
+          params.set('status', options.status);
+        }
+        if (options.courseId) params.set('courseId', options.courseId);
+        const qs = params.toString();
+        return api.get<{
+          submissions: Array<{
+            id: string;
+            status: string;
+            grade: number | null;
+            feedback: string | null;
+            ai_score: number | null;
+            ai_feedback: string | null;
+            ai_rubric: any[] | null;
+            ai_grade_status: string | null;
+            is_late: boolean;
+            submitted_at: string;
+            description: string | null;
+            screenshot_urls: string[] | null;
+            submission_url: string | null;
+            student: {
+              id: string;
+              full_name: string | null;
+              email: string | null;
+              avatar_url: string | null;
+            } | null;
+            project: { id: string; title: string; course_id: string } | null;
+            course: { id: string; title: string } | null;
+          }>;
+          counts: { pending: number; graded: number; total: number };
+        }>(`/projects/instructor/${instructorId}/submissions${qs ? `?${qs}` : ''}`, token);
+      },
+
+    approveGrade: (
+      submissionId: string,
+      body: { grade: number; feedback: string; instructor_id: string },
+      token: string,
+    ) =>
+      api.put<{ success: boolean; submission: any }>(
+        `/projects/submissions/${submissionId}/grade`,
+        body,
+        token,
+      ),
+
+    submit: (body: unknown, token: string) =>
+      api.post('/projects/submit', body, token),
+    studentSubmissions: (studentId: string, token?: string) =>
+      api.get(`/projects/student/${studentId}/submissions`, token),
+  },
  // Videos
  videos: {
    list: () => api.get('/videos'),

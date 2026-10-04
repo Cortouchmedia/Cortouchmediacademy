@@ -11,7 +11,9 @@ export default function InstructorCoursesPage() {
   const { 
     currentUser, courses, handleCourseSelect, handleInstructorCourseAdd,
     editingCourse, setEditingCourse, handleCourseUpdate, handleModuleAdd, 
-    handleLessonAdd, handleLessonDelete, handleWebinarAdd, handleWebinarDelete
+    handleLessonAdd, handleLessonDelete, handleWebinarAdd, handleWebinarDelete,
+    handleProjectAdd, handleProjectDelete,
+    handleAIGrade, handleApproveGrade,
   } = useAppContext();
   const router = useRouter();
 
@@ -32,21 +34,25 @@ export default function InstructorCoursesPage() {
   // ⬇️ NOW it's safe to return early
   if (!currentUser || currentUser.role !== 'instructor') return null;
 
-if (editingCourse) {
-  return (
-    <EditCourse
-      course={editingCourse}
-      allCourses={courses}
-      onUpdateCourse={handleCourseUpdate}
-      onAddModule={handleModuleAdd}
-      onAddLesson={handleLessonAdd}
-      onDeleteLesson={handleLessonDelete}
-      onAddWebinar={handleWebinarAdd}
-      onDeleteWebinar={handleWebinarDelete}
-      onBack={() => setEditingCourse(null)}
-    />
-  );
-}
+  if (editingCourse) {
+    return (
+      <EditCourse
+        course={editingCourse}
+        allCourses={courses}
+        onUpdateCourse={handleCourseUpdate}
+        onAddModule={handleModuleAdd}
+        onAddLesson={handleLessonAdd}
+        onDeleteLesson={handleLessonDelete}
+        onAddWebinar={handleWebinarAdd}
+        onDeleteWebinar={handleWebinarDelete}
+        onAddProject={handleProjectAdd}
+        onDeleteProject={handleProjectDelete}
+        onAIGrade={handleAIGrade}
+        onApproveGrade={handleApproveGrade}
+        onBack={() => setEditingCourse(null)}
+      />
+    );
+  }
 
 if (previewingCourse) {
     return (

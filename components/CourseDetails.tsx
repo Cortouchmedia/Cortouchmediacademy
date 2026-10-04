@@ -9,6 +9,7 @@ import { InstructorAssistant } from './InstructorAssistant';
 import { CourseLandingPage } from './CourseLandingPage';
 import { useAppContext } from '../context/AppContext';
 import { useRouter } from 'next/navigation';
+import { Api, authStorage } from '../lib/api';
 
 interface CourseDetailsProps {
   user: User | null;
@@ -51,7 +52,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
   allCourses,
 }) => {
   const {
-    handleProjectSubmit: onProjectSubmit,
+    handleProjectSubmitWithFiles: onProjectSubmitWithFiles,
     handleToggleLessonComplete: onToggleLessonComplete,
     handleEnrollmentSuccess: onEnrollmentSuccess,
     handleSendCourseMessage: onSendCourseMessage,
@@ -62,7 +63,23 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
 
   const [activeTab, setActiveTab] = useState<CourseTab>('Curriculum');
   const [activeLesson, setActiveLesson] = useState<any>(null);
-  const [submissionLinks, setSubmissionLinks] = useState<Record<number, string>>({});
+
+  // Per-project form state (keyed by project id)
+  const [screenshotFiles, setScreenshotFiles] = useState<Record<string, File[]>>({});
+  const [screenshotPreviews, setScreenshotPreviews] = useState<Record<string, string[]>>({});
+  const [submissionDescriptions, setSubmissionDescriptions] = useState<Record<string, string>>({});
+  const [submissionLinks, setSubmissionLinks] = useState<Record<string, string>>({});
+  const [submittingProject, setSubmittingProject] = useState<string | null>(null);
+
+  // Per-student project deadlines (keyed by project id)
+  const [deadlines, setDeadlines] = useState<Record<string, {
+    deadline: string | null;
+    source: 'course_completion' | 'instructor_default' | 'none';
+    course_completed: boolean;
+    course_completed_at: string | null;
+  }>>({});
+
+  const [mySubmissions, setMySubmissions] = useState<Record<string, any>>({});
 
   const isOwnerOrAdmin = useMemo(
     () =>
@@ -72,6 +89,77 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
           String(course.instructor_id) === String(user.id))),
     [user, course.instructor_id],
   );
+
+  // Fetch each project's deadline for the current student
+  React.useEffect(() => {
+    if (!user || user.role !== 'student') return;
+    if (!Array.isArray(course.projects) || course.projects.length === 0) return;
+
+    const token = authStorage.getToken();
+    if (!token) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const results: Record<string, any> = {};
+      await Promise.all(
+        course.projects.map(async (project: any) => {
+          try {
+            const res = await Api.projects.deadline(
+              String(project.id),
+              user.id,
+              token,
+            );
+            results[String(project.id)] = res;
+          } catch (err) {
+            console.warn(
+              `Failed to fetch deadline for project ${project.id}:`,
+              err,
+            );
+          }
+        }),
+      );
+      if (!cancelled) setDeadlines(results);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, course.id, course.projects?.length]);
+
+    React.useEffect(() => {
+      if (!user || user.role !== 'student') return;
+      const token = authStorage.getToken();
+      if (!token) return;
+  
+      let cancelled = false;
+  
+      (async () => {
+        try {
+          const res: any = await Api.projects.studentSubmissions(user.id, token);
+          const list = Array.isArray(res) ? res : res?.data ?? [];
+  
+          // Keep only the latest submission per project
+          const byProject: Record<string, any> = {};
+          for (const s of list) {
+            const pid = String(s.project_id);
+            if (
+              !byProject[pid] ||
+              new Date(s.submitted_at) > new Date(byProject[pid].submitted_at)
+            ) {
+              byProject[pid] = s;
+            }
+          }
+          if (!cancelled) setMySubmissions(byProject);
+        } catch (err) {
+          console.warn('Failed to fetch student submissions:', err);
+        }
+      })();
+  
+      return () => {
+        cancelled = true;
+      };
+    }, [user?.id, course.id]);
 
   // Real, computed stats
   const totalLessons = useMemo(() => {
@@ -126,8 +214,87 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
     }
   };
 
-  const handleLinkChange = (projectId: number, link: string) => {
+  // ==================== PROJECT SUBMISSION HANDLERS ====================
+
+  const handleScreenshotChange = (projectId: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files).slice(0, 5);
+    setScreenshotFiles((prev) => ({ ...prev, [projectId]: arr }));
+    setScreenshotPreviews((prev) => ({
+      ...prev,
+      [projectId]: arr.map((f) => URL.createObjectURL(f)),
+    }));
+  };
+
+  const handleDescriptionChange = (projectId: string, text: string) => {
+    setSubmissionDescriptions((prev) => ({ ...prev, [projectId]: text }));
+  };
+
+  const handleLinkChange = (projectId: string, link: string) => {
     setSubmissionLinks((prev) => ({ ...prev, [projectId]: link }));
+  };
+
+  const canSubmit = (projectId: string) => {
+    const desc = (submissionDescriptions[projectId] || '').trim();
+    const shots = screenshotFiles[projectId] ?? [];
+    return desc.length > 0 && shots.length > 0;
+  };
+
+  const handleSubmitProject = async (projectId: string, projectTitle: string) => {
+    const screenshots = screenshotFiles[projectId] ?? [];
+    const description = (submissionDescriptions[projectId] || '').trim();
+    const url = submissionLinks[projectId];
+
+    if (!description) {
+      alert('Please describe what you built before submitting.');
+      return;
+    }
+    if (screenshots.length === 0) {
+      alert('Please upload at least one screenshot of your work.');
+      return;
+    }
+
+    setSubmittingProject(projectId);
+    try {
+      await onProjectSubmitWithFiles(course.id, projectId, {
+        description,
+        submissionUrl: url || undefined,
+        screenshots,
+      });
+           // Clear form
+           setScreenshotFiles((prev) => ({ ...prev, [projectId]: [] }));
+           setScreenshotPreviews((prev) => ({ ...prev, [projectId]: [] }));
+           setSubmissionDescriptions((prev) => ({ ...prev, [projectId]: '' }));
+           setSubmissionLinks((prev) => ({ ...prev, [projectId]: '' }));
+     
+           // Refresh submissions so the card immediately flips to "Submitted"
+           if (user && user.role === 'student') {
+             const token = authStorage.getToken();
+             if (token) {
+               try {
+                 const res: any = await Api.projects.studentSubmissions(user.id, token);
+                 const list = Array.isArray(res) ? res : res?.data ?? [];
+                 const byProject: Record<string, any> = {};
+                 for (const s of list) {
+                   const p = String(s.project_id);
+                   if (
+                     !byProject[p] ||
+                     new Date(s.submitted_at) > new Date(byProject[p].submitted_at)
+                   ) {
+                     byProject[p] = s;
+                   }
+                 }
+                 setMySubmissions(byProject);
+               } catch (err) {
+                 console.warn('Failed to refresh submissions:', err);
+               }
+             }
+           }
+         } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
+    } finally {
+      setSubmittingProject(null);
+    }
   };
 
   const prerequisiteCourses = course.prerequisiteCourseIds
@@ -384,60 +551,176 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             </div>
           )}
 
-          {activeTab === 'Projects' && (
+{activeTab === 'Projects' && (
             <div className="space-y-4">
-              {(course.projects ?? []).map((project: any) => (
-                <div key={project.id} className="bg-white p-6 rounded-xl border border-gray-200">
-                  <h3 className="text-lg font-bold text-gray-900">{project.title}</h3>
-                  <p className="text-sm text-brand-muted mt-2">{project.description}</p>
-                  {project.isSubmitted ? (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Icon name="checkCircle" className="w-5 h-5 text-brand-accent" />
-                        <span className="text-sm font-bold text-brand-accent">Submitted</span>
-                      </div>
-                      {project.submissionLink && (
-                        <p className="text-xs text-brand-muted mb-3 break-all">
-                          Link:{' '}
-                          <a href={project.submissionLink} target="_blank" rel="noopener noreferrer" className="text-brand-primary hover:underline">
-                            {project.submissionLink}
-                          </a>
-                        </p>
+              {(course.projects ?? []).map((project: any) => {
+                const pid = String(project.id);
+                const dl = deadlines[pid];
+                const isLate = dl?.deadline
+                  ? new Date(dl.deadline) < new Date()
+                  : false;
+                const isSubmitting = submittingProject === pid;
+                const sub = mySubmissions[pid];
+                const isSubmitted = !!sub;
+
+                return (
+                  <div key={project.id} className="bg-white p-6 rounded-xl border border-gray-200">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <h3 className="text-lg font-bold text-gray-900">{project.title}</h3>
+                      {!isOwnerOrAdmin && dl && (
+                        <span
+                          className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                            dl.source === 'none'
+                              ? 'bg-gray-100 text-gray-600'
+                              : isLate
+                                ? 'bg-red-50 text-red-700'
+                                : 'bg-green-50 text-green-700'
+                          }`}
+                        >
+                          {dl.source === 'none'
+                            ? 'Complete course to unlock'
+                            : isLate
+                              ? `Overdue: ${new Date(dl.deadline!).toLocaleDateString()}`
+                              : `Due: ${new Date(dl.deadline!).toLocaleDateString()}`}
+                        </span>
                       )}
-                      {project.feedback && (
-                        <>
-                          <p className="text-sm font-semibold text-gray-800">
-                            Score: <span className="text-brand-accent">{project.score}%</span>
+                    </div>
+                    <p className="text-sm text-brand-muted mt-2">{project.description}</p>
+
+                    {/* Deadline context line */}
+                    {!isOwnerOrAdmin && dl && dl.source !== 'none' && (
+                      <p className="text-xs text-brand-muted mt-2">
+                        {dl.source === 'course_completion' && dl.course_completed_at
+                          ? `Your 3-week deadline started on ${new Date(
+                              dl.course_completed_at,
+                            ).toLocaleDateString()}.`
+                          : dl.source === 'instructor_default'
+                            ? 'Suggested deadline from your instructor. Complete the course to start your personal 3-week window.'
+                            : ''}
+                      </p>
+                    )}
+
+{isSubmitted ? (
+                      <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon name="checkCircle" className="w-5 h-5 text-brand-accent" />
+                          <span className="text-sm font-bold text-brand-accent">
+                            Submitted
+                          </span>
+                          {sub.is_late && (
+                            <span className="text-xs text-red-600 font-semibold">
+                              (Late)
+                            </span>
+                          )}
+                        </div>
+                        {sub.submission_url && (
+                          <p className="text-xs text-brand-muted mb-3 break-all">
+                            Link:{' '}
+                            <a
+                              href={sub.submission_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-primary hover:underline"
+                            >
+                              {sub.submission_url}
+                            </a>
                           </p>
-                          <p className="text-sm text-gray-600 mt-2 italic">"{project.feedback}"</p>
-                        </>
-                      )}
-                    </div>
-                  ) : isOwnerOrAdmin ? (
-                    <p className="mt-4 text-sm text-gray-500 italic">
-                      Students will submit their work here.
-                    </p>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      <input
-                        type="url"
-                        placeholder="https://github.com/your-repo"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
-                        value={submissionLinks[project.id] || ''}
-                        onChange={(e) => handleLinkChange(project.id, e.target.value)}
-                        disabled={project.isGrading}
-                      />
-                      <button
-                        onClick={() => onProjectSubmit(course.id, project.id, submissionLinks[project.id] || '')}
-                        disabled={project.isGrading || !submissionLinks[project.id]}
-                        className="px-6 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {project.isGrading ? 'AI Grading…' : 'Submit for AI Grading'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                        )}
+                        {sub.grade != null ? (
+                          <>
+                            <p className="text-sm font-semibold text-gray-800">
+                              Score:{' '}
+                              <span className="text-brand-accent">
+                                {sub.grade} / {project.points_possible ?? 100}
+                              </span>
+                            </p>
+                            {sub.feedback && (
+                              <p className="text-sm text-gray-600 mt-2 italic">
+                                "{sub.feedback}"
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-brand-muted italic">
+                            Your instructor hasn't graded this yet.
+                          </p>
+                        )}
+                      </div>
+                    ) : isOwnerOrAdmin ? (
+                      <p className="mt-4 text-sm text-gray-500 italic">
+                        Students will submit their work here.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {/* Screenshot uploader */}
+                        <div>
+                          <label className="block text-xs font-medium text-brand-muted mb-1">
+                            Upload Screenshots (1–5) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => handleScreenshotChange(pid, e.target.files)}
+                            className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-primary file:text-white file:font-semibold file:cursor-pointer hover:file:bg-brand-primary/90"
+                            disabled={isSubmitting}
+                          />
+                          {(screenshotPreviews[pid] ?? []).length > 0 && (
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              {(screenshotPreviews[pid] ?? []).map((src, i) => (
+                                <img
+                                  key={i}
+                                  src={src}
+                                  alt={`screenshot ${i + 1}`}
+                                  className="w-20 h-20 rounded object-cover border border-gray-200"
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <label className="block text-xs font-medium text-brand-muted mb-1">
+                            Description <span className="text-red-500">*</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            placeholder="Describe what you built, how you approached it, and any challenges you ran into..."
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
+                            value={submissionDescriptions[pid] || ''}
+                            onChange={(e) => handleDescriptionChange(pid, e.target.value)}
+                            disabled={isSubmitting}
+                          />
+                        </div>
+
+                        {/* Optional URL */}
+                        <div>
+                          <label className="block text-xs font-medium text-brand-muted mb-1">
+                            Live URL / Repo (optional)
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://github.com/your-repo"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
+                            value={submissionLinks[pid] || ''}
+                            onChange={(e) => handleLinkChange(pid, e.target.value)}
+                            disabled={isSubmitting}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => handleSubmitProject(pid, project.title)}
+                          disabled={isSubmitting || !canSubmit(pid)}
+                          className="px-6 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isSubmitting ? 'Submitting…' : 'Submit Project'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {(course.projects?.length ?? 0) === 0 && (
                 <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                   <p className="text-gray-500">No projects for this course yet.</p>

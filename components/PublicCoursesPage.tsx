@@ -2,305 +2,90 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { Icon } from "./Icon";
-import { Logo } from "./Logo";
 import { CourseCard } from "./CourseCard";
 import { CourseDetails } from "./CourseDetails";
 import { PublicHeader } from "./PublicHeader";
 import { Footer } from "./Footer";
 import { useAppContext } from "../context/AppContext";
 import { translations } from "../constants/translations";
-import { LanguageSwitcher } from "./LanguageSwitcher";
-import type { Course, CourseWithEnrollment, User, Module, Lesson, Project } from "../types";
-import Link from "next/link";
+import type { CourseWithEnrollment, User } from "../types";
 import { useRouter } from "next/navigation";
-
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
 
 interface PublicCoursesPageProps {
   user: User | null;
   allCourses: CourseWithEnrollment[];
 }
 
-// Real course images mapping by category
-const courseImages: Record<string, string[]> = {
-  "Web Development": [
-    "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1547658719-da2b51169166?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1627398242454-45a1465c2479?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=400&h=300&fit=crop"
-  ],
-  "Python": [
-    "https://images.unsplash.com/photo-1526379095098-d4fd4345c60a?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1534665482403-a909d0d97c67?w=400&h=300&fit=crop"
-  ],
-  "JavaScript": [
-    "https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1623479322729-28b25c16b011?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop"
-  ],
-  "Excel": [
-    "https://images.pexels.com/photos/669615/pexels-photo-669615.jpeg?w=400&h=300&fit=crop",
-    "https://images.pexels.com/photos/265087/pexels-photo-265087.jpeg?w=400&h=300&fit=crop",
-    "https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg?w=400&h=300&fit=crop",
-    "https://images.pexels.com/photos/4145190/pexels-photo-4145190.jpeg?w=400&h=300&fit=crop"
-  ],
-  "React": [
-    "https://images.unsplash.com/photo-1633356122102-3fe601e05bd2?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=400&h=300&fit=crop"
-  ],
-  "Data Science": [
-    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=300&fit=crop"
-  ],
-  "Amazon AWS": [
-    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400&h=300&fit=crop"
-  ],
-  "Drawing": [
-    "https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400&h=300&fit=crop",
-    "https://images.unsplash.com/photo-1482160549825-59d1b23cb208?w=400&h=300&fit=crop"
-  ]
-};
-
-const defaultImage = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&h=300&fit=crop";
-
-// Generate demo courses - ALWAYS returns courses
-const generateDemoCourses = (): CourseWithEnrollment[] => {
-  const categories = [
-    "Web Development",
-    "Python",
-    "Excel",
-    "JavaScript",
-    "Data Science",
-    "Amazon AWS",
-    "Drawing"
-  ];
-
-  const instructors = [
-    "John Smith", "Sarah Johnson", "Michael Brown", "Emily Davis", "David Wilson",
-    "Lisa Anderson", "Robert Taylor", "Maria Garcia", "James Martinez", "Patricia Lee"
-  ];
-
-  const titles: Record<string, string[]> = {
-    "Web Development": [
-      "Complete Web Development Bootcamp",
-      "Advanced Frontend Development",
-      "Backend Mastery with Node.js",
-      "Full Stack React & Django",
-      "Modern Web Design with Tailwind"
-    ],
-    "Python": [
-      "Python for Beginners",
-      "Advanced Python Programming",
-      "Python Data Structures & Algorithms",
-      "Python Automation & Scripting",
-      "Python Web Development with Django"
-    ],
-    "JavaScript": [
-      "JavaScript: The Complete Guide",
-      "Modern ES6+ JavaScript",
-      "Advanced JavaScript Concepts",
-      "Asynchronous JavaScript Mastery",
-      "JavaScript Design Patterns"
-    ],
-    "Excel": [
-      "Excel Skills for Business",
-      "Advanced Excel Formulas",
-      "Excel Data Analysis",
-      "Excel VBA Programming",
-      "Excel Dashboard Design"
-    ]
-  };
-
-  const generatedCourses: CourseWithEnrollment[] = [];
-  let id = 1;
-
-  categories.forEach(category => {
-    const categoryTitles = titles[category] || [
-      `Advanced ${category}`,
-      `${category} Masterclass`,
-      `${category} for Professionals`,
-      `${category} Bootcamp`,
-      `Complete ${category} Guide`
-    ];
-
-    categoryTitles.forEach((title, index) => {
-      const categoryImages = courseImages[category] || [defaultImage];
-      const imageUrl = categoryImages[index % categoryImages.length];
-
-      const sampleModules: Module[] = [
-        {
-          id: 1,
-          title: "Introduction",
-          lessons: [
-            { id: 1, title: "Welcome to the Course", duration: "5 min", type: "video" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 2, title: "What You'll Learn", duration: "10 min", type: "video" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 3, title: "Course Resources", duration: "3 min", type: "text" as const, videoUrl: "", content: "", isCompleted: false }
-          ],
-          progress: 0
-        },
-        {
-          id: 2,
-          title: "Core Concepts",
-          lessons: [
-            { id: 4, title: "Fundamentals", duration: "20 min", type: "video" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 5, title: "Hands-on Exercise", duration: "15 min", type: "text" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 6, title: "Quiz: Core Concepts", duration: "10 min", type: "text" as const, videoUrl: "", content: "", isCompleted: false }
-          ],
-          progress: 0
-        },
-        {
-          id: 3,
-          title: "Advanced Topics",
-          lessons: [
-            { id: 7, title: "Advanced Techniques", duration: "25 min", type: "video" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 8, title: "Real-world Projects", duration: "30 min", type: "video" as const, videoUrl: "", content: "", isCompleted: false },
-            { id: 9, title: "Final Assessment", duration: "20 min", type: "text" as const, videoUrl: "", content: "", isCompleted: false }
-          ],
-          progress: 0
-        }
-      ];
-
-      const sampleProjects: Project[] = [
-        {
-          id: 1,
-          title: "Project 1: Build Your First Application",
-          description: "Create a basic application using the concepts learned in this course.",
-          isSubmitted: false,
-          score: undefined,
-          feedback: undefined,
-          isGrading: false
-        },
-        {
-          id: 2,
-          title: "Project 2: Advanced Implementation",
-          description: "Implement advanced features and best practices.",
-          isSubmitted: false,
-          score: undefined,
-          feedback: undefined,
-          isGrading: false
-        }
-      ];
-
-      const seed = id * 1000;
-      const instructor = instructors[Math.floor(seededRandom(seed) * instructors.length)];
-      const price = Math.floor(seededRandom(seed + 1) * 100) + 20;
-      const rating = parseFloat((4 + seededRandom(seed + 2)).toFixed(1));
-      const enrollmentCount = Math.floor(seededRandom(seed + 3) * 5000) + 100;
-      const durationHours = Math.floor(seededRandom(seed + 4) * 40) + 5;
-
-      generatedCourses.push({
-        id: id,
-        title: title,
-        instructor: instructor,
-        category: category,
-        price: price,
-        rating: rating,
-        enrollmentCount: enrollmentCount,
-        imageUrl: imageUrl,
-        duration: `${durationHours} hours`,
-        description: `Learn ${title} from industry experts. Master ${category} with hands-on projects and real-world examples. This comprehensive course will take you from beginner to advanced level.`,
-        modules: 3,
-        progress: 0,
-        completed: false,
-        content: sampleModules,
-        projects: sampleProjects,
-        reviews: [
-          { id: 1, author: "John Doe", avatarUrl: "https://picsum.photos/seed/user1/40/40", rating: 5, comment: "Absolutely fantastic course! Highly recommended for anyone starting out." },
-          { id: 2, author: "Jane Smith", avatarUrl: "https://picsum.photos/seed/user2/40/40", rating: 4, comment: "Very informative and well-paced. The projects were particularly helpful." },
-          { id: 3, author: "Samuel Ade", avatarUrl: "https://picsum.photos/seed/user3/40/40", rating: 5, comment: "The instructor explains complex topics in a very simple way. Great value!" }
-        ],
-        isEnrolled: false,
-        whatYouWillLearn: [
-          "Master core concepts and advanced techniques",
-          "Build real-world projects from scratch",
-          "Get hands-on experience with practical exercises",
-          "Learn from industry experts",
-          "Access downloadable resources and materials",
-          "Earn a certificate of completion"
-        ],
-        requirements: [
-          "No prior experience required - we'll start from basics",
-          "Computer with internet connection",
-          "Willingness to learn and practice"
-        ],
-        instructorBio: `${instructor} is a passionate educator with over 10 years of experience in ${category}. They have helped thousands of students achieve their learning goals through practical, hands-on teaching methods.`
-      });
-      id++;
-    });
-  });
-
-  return generatedCourses;
-};
-
 export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
   user,
   allCourses: initialCourses,
 }) => {
-  const {
-    language,
-    handleEnrollmentSuccess,
-    handleProjectSubmit,
-    handleToggleLessonComplete,
-    handleSendCourseMessage,
-  } = useAppContext();
+  const { language, handleEnrollmentSuccess } = useAppContext();
   const t = translations[language];
   const router = useRouter();
 
-  const onNavigateToSignIn = () => router.push('/login');
-  const onNavigateToSignUp = () => router.push('/signup');
+  const onNavigateToSignIn = () => router.push("/login");
+  const onNavigateToSignUp = () => router.push("/signup");
   const onEnrollmentSuccess = handleEnrollmentSuccess;
-  const onProjectSubmit = handleProjectSubmit;
-  const onToggleLessonComplete = handleToggleLessonComplete;
-  const onSendCourseMessage = handleSendCourseMessage;
 
-  const [selectedCourse, setSelectedCourse] = useState<CourseWithEnrollment | null>(null);
+  const [selectedCourse, setSelectedCourse] =
+    useState<CourseWithEnrollment | null>(null);
   const [showCourseDetails, setShowCourseDetails] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CourseWithEnrollment[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<"popular" | "rating" | "price-low" | "price-high">("popular");
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 200]);
+  const [sortBy, setSortBy] = useState<
+    "popular" | "rating" | "price-low" | "price-high"
+  >("popular");
   const [showFilters, setShowFilters] = useState(false);
   const coursesPerPage = 12;
 
   const allCourses = useMemo(() => {
-   
-    const source = initialCourses && initialCourses.length > 0
-      ? initialCourses
-      : generateDemoCourses();
-
-    if (user && user.enrolledCourseIds && user.enrolledCourseIds.length > 0) {
+    const source = initialCourses ?? [];
+    if (user?.enrolledCourseIds?.length) {
       return source.map((course) => ({
         ...course,
-        isEnrolled: user.enrolledCourseIds.includes(course.id as any),
+        isEnrolled: user.enrolledCourseIds!.includes(course.id as any),
       }));
     }
-  
     return source;
-  }, [user, initialCourses]);   
+  }, [user, initialCourses]);
 
-  const categories = useMemo(() => {
-    const uniqueCategories = ["All", ...new Set(allCourses.map(course => course.category))];
-    return uniqueCategories;
+  // Dynamic max price based on actual data (so the filter never hides
+  // everything by default)
+  const maxPrice = useMemo(() => {
+    const prices = allCourses
+      .map((c) => Number(c.price))
+      .filter((p) => Number.isFinite(p) && p > 0);
+    return prices.length ? Math.max(...prices) : 100;
   }, [allCourses]);
 
-  // Handle course selection - ALLOW ANYONE to view course details
-  const handleCourseSelect = (course: CourseWithEnrollment) => {
-    console.log("Course selected:", course.title);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
 
-    // Allow anyone to view course details (no login required)
-    const fullCourse = allCourses.find(c => c.id === course.id);
+  // Initialize / reset the upper bound when the data changes
+  useEffect(() => {
+    setPriceRange([0, maxPrice]);
+  }, [maxPrice]);
+
+  // Normalize categories: trims, dedupes case-insensitively, sorts
+  const categories = useMemo(() => {
+    const seen = new Map<string, string>();
+    allCourses.forEach((c) => {
+      const raw = (c.category ?? "General").toString();
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) seen.set(key, trimmed);
+    });
+    return ["All", ...Array.from(seen.values()).sort()];
+  }, [allCourses]);
+
+  const handleCourseSelect = (course: CourseWithEnrollment) => {
+    const fullCourse = allCourses.find(
+      (c) => String(c.id) === String(course.id),
+    );
     if (fullCourse) {
       setSelectedCourse(fullCourse);
       setShowCourseDetails(true);
@@ -308,18 +93,10 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
     }
   };
 
-  const handleBackToCourses = () => {
-    setShowCourseDetails(false);
-    setSelectedCourse(null);
-  };
-
   const handleEnrollmentSuccessLocal = (courseId: number) => {
     onEnrollmentSuccess(courseId);
     if (selectedCourse && selectedCourse.id === courseId) {
-      setSelectedCourse({
-        ...selectedCourse,
-        isEnrolled: true
-      });
+      setSelectedCourse({ ...selectedCourse, isEnrolled: true });
     }
   };
 
@@ -329,11 +106,12 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
       setIsSearching(false);
       return;
     }
-
-    const results = allCourses.filter(course =>
-      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.instructor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.category.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.toLowerCase();
+    const results = allCourses.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.instructor.toLowerCase().includes(q) ||
+        c.category.toLowerCase().includes(q),
     );
     setSearchResults(results);
     setIsSearching(true);
@@ -351,16 +129,24 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
     let courses = isSearching ? searchResults : allCourses;
 
     if (!isSearching && activeCategory !== "All") {
-      courses = courses.filter(course => course.category === activeCategory);
+      const active = activeCategory.trim().toLowerCase();
+      courses = courses.filter(
+        (c) => (c.category ?? "").trim().toLowerCase() === active,
+      );
     }
 
-    courses = courses.filter(course =>
-      course.price >= priceRange[0] && course.price <= priceRange[1]
-    );
+    // Only apply price filter when the user has narrowed the range
+    if (priceRange[1] < maxPrice) {
+      courses = courses.filter(
+        (c) => c.price >= priceRange[0] && c.price <= priceRange[1],
+      );
+    }
 
     switch (sortBy) {
       case "popular":
-        courses = [...courses].sort((a, b) => b.enrollmentCount - a.enrollmentCount);
+        courses = [...courses].sort(
+          (a, b) => b.enrollmentCount - a.enrollmentCount,
+        );
         break;
       case "rating":
         courses = [...courses].sort((a, b) => b.rating - a.rating);
@@ -374,19 +160,26 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
     }
 
     return courses;
-  }, [isSearching, searchResults, allCourses, activeCategory, priceRange, sortBy]);
+  }, [
+    isSearching,
+    searchResults,
+    allCourses,
+    activeCategory,
+    priceRange,
+    maxPrice,
+    sortBy,
+  ]);
 
   const totalPages = Math.ceil(filteredCourses.length / coursesPerPage);
   const paginatedCourses = filteredCourses.slice(
     (currentPage - 1) * coursesPerPage,
-    currentPage * coursesPerPage
+    currentPage * coursesPerPage,
   );
 
   useEffect(() => {
     setCurrentPage(1);
   }, [activeCategory, searchQuery, priceRange, sortBy]);
 
-  // If showing course details, render the CourseDetails component
   if (showCourseDetails && selectedCourse) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -428,8 +221,12 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
               </h1>
               <p className="text-gray-600 mt-2">
                 {isSearching
-                  ? `${filteredCourses.length} ${t.foundCourses?.replace('{count}', '') || "courses found"}`
-                  : `${allCourses.length}+ ${t.selectionSubtitle || "courses to choose from"}`}
+                  ? `${filteredCourses.length} ${
+                      t.foundCourses?.replace("{count}", "") || "courses found"
+                    }`
+                  : `${allCourses.length}+ ${
+                      t.selectionSubtitle || "courses to choose from"
+                    }`}
               </p>
             </div>
 
@@ -460,25 +257,30 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Price Range: ${priceRange[0]} - ${priceRange[1]}
+                    Price Range: {priceRange[0].toLocaleString()} –{" "}
+                    {priceRange[1].toLocaleString()}
                   </label>
                   <div className="flex items-center gap-4">
                     <input
                       type="range"
-                      min="0"
-                      max="200"
-                      step="10"
+                      min={0}
+                      max={maxPrice}
+                      step={Math.max(1, Math.floor(maxPrice / 100))}
                       value={priceRange[0]}
-                      onChange={(e) => setPriceRange([parseInt(e.target.value), priceRange[1]])}
+                      onChange={(e) =>
+                        setPriceRange([Number(e.target.value), priceRange[1]])
+                      }
                       className="flex-1"
                     />
                     <input
                       type="range"
-                      min="0"
-                      max="200"
-                      step="10"
+                      min={0}
+                      max={maxPrice}
+                      step={Math.max(1, Math.floor(maxPrice / 100))}
                       value={priceRange[1]}
-                      onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
+                      onChange={(e) =>
+                        setPriceRange([priceRange[0], Number(e.target.value)])
+                      }
                       className="flex-1"
                     />
                   </div>
@@ -487,7 +289,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                 <div className="flex items-end">
                   <button
                     onClick={() => {
-                      setPriceRange([0, 200]);
+                      setPriceRange([0, maxPrice]);
                       setSortBy("popular");
                     }}
                     className="px-4 py-2 text-sm text-[#219BD5] hover:text-[#1a7fb0] font-semibold"
@@ -507,8 +309,8 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                   onClick={() => setActiveCategory(cat)}
                   className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
                     activeCategory === cat
-                      ? 'bg-[#219BD5] text-white shadow-md'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? "bg-[#219BD5] text-white shadow-md"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}
                 >
                   {cat}
@@ -532,7 +334,7 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
           {paginatedCourses.length > 0 ? (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {paginatedCourses.map(course => (
+                {paginatedCourses.map((course) => (
                   <CourseCard
                     key={course.id}
                     course={course}
@@ -545,7 +347,9 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
               {totalPages > 1 && (
                 <div className="flex justify-center items-center gap-2 mt-12">
                   <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(1, prev - 1))
+                    }
                     disabled={currentPage === 1}
                     className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -555,15 +359,11 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                   <div className="flex gap-1">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
+                      if (totalPages <= 5) pageNum = i + 1;
+                      else if (currentPage <= 3) pageNum = i + 1;
+                      else if (currentPage >= totalPages - 2)
                         pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
+                      else pageNum = currentPage - 2 + i;
 
                       return (
                         <button
@@ -571,8 +371,8 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                           onClick={() => setCurrentPage(pageNum)}
                           className={`w-10 h-10 rounded-lg font-semibold transition-colors ${
                             currentPage === pageNum
-                              ? 'bg-[#219BD5] text-white'
-                              : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                              ? "bg-[#219BD5] text-white"
+                              : "border border-gray-300 text-gray-600 hover:bg-gray-50"
                           }`}
                         >
                           {pageNum}
@@ -582,7 +382,9 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
                   </div>
 
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                    }
                     disabled={currentPage === totalPages}
                     className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -594,9 +396,13 @@ export const PublicCoursesPage: React.FC<PublicCoursesPageProps> = ({
           ) : (
             <div className="text-center py-20 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
               <div className="text-6xl mb-4">📚</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">No courses found</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                No courses found
+              </h3>
               <p className="text-gray-500 mb-6">
-                {searchQuery ? `No matches for "${searchQuery}"` : "Check back later for new courses"}
+                {searchQuery
+                  ? `No matches for "${searchQuery}"`
+                  : "Check back later for new courses"}
               </p>
               {searchQuery && (
                 <button
