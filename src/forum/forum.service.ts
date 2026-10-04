@@ -68,10 +68,30 @@ export class ForumService {
   async createTopic(userId: string, createTopicDto: CreateTopicDto) {
     const supabase = this.supabaseService.getAdminClient();
 
+    // Resolve a category: use the one provided, or fall back to the first active category
+    let categoryId = createTopicDto.category_id;
+    if (!categoryId) {
+      const { data: defaultCategory } = await supabase
+        .from("forum_categories")
+        .select("id")
+        .eq("is_active", true)
+        .order("order_number", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      categoryId = defaultCategory?.id;
+    }
+
+    if (!categoryId) {
+      throw new BadRequestException(
+        "No forum category available. Please create a category first.",
+      );
+    }
+
     const { data, error } = await supabase
       .from("forum_topics")
       .insert({
         ...createTopicDto,
+        category_id: categoryId,
         user_id: userId,
         created_at: new Date(),
         updated_at: new Date(),

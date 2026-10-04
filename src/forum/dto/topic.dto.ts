@@ -16,8 +16,8 @@ export class CreateTopicDto {
   content: string;
 
   @IsString()
-  @IsNotEmpty()
-  category_id: string;
+  @IsOptional()
+  category_id?: string;
 
   @IsString()
   @IsOptional()

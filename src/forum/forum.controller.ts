@@ -9,16 +9,24 @@ import {
   Param,
   Query,
   UseGuards,
+  Req,
+  ForbiddenException,
 } from "@nestjs/common";
+import type { Request } from "express";
 import { ForumService } from "./forum.service";
 import { CreateTopicDto, UpdateTopicDto } from "./dto/topic.dto";
 import { CreateReplyDto, UpdateReplyDto } from "./dto/reply.dto";
+import { SupabaseAuthGuard } from "../auth/supabase-auth.guard";
+import { OptionalSupabaseAuthGuard } from "../auth/optional-supabase-auth.guard";
+import { CurrentUser } from "../auth/current-user.decorator";
+
+type AuthUser = { id: string; email?: string };
 
 @Controller("api/forum")
 export class ForumController {
   constructor(private readonly forumService: ForumService) {}
 
-  // ==================== CATEGORIES ====================
+  // ==================== CATEGORIES (public) ====================
 
   @Get("categories")
   async getAllCategories() {
@@ -33,11 +41,12 @@ export class ForumController {
   // ==================== TOPICS ====================
 
   @Post("topics")
+  @UseGuards(SupabaseAuthGuard)
   async createTopic(
     @Body() createTopicDto: CreateTopicDto,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.createTopic(userId, createTopicDto);
+    return this.forumService.createTopic(user.id, createTopicDto);
   }
 
   @Get("topics")
@@ -46,95 +55,124 @@ export class ForumController {
     @Query("course_id") course_id?: string,
     @Query("search") search?: string,
     @Query("sort") sort?: "newest" | "oldest" | "most_replies" | "most_views",
-    @Query("page") page?: number,
-    @Query("limit") limit?: number,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
     return this.forumService.getAllTopics({
       category_id,
       course_id,
       search,
       sort,
-      page: page ? +page : 1,
-      limit: limit ? +limit : 20,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 20,
     });
   }
 
   @Get("topics/:id")
+  @UseGuards(OptionalSupabaseAuthGuard)
   async getTopicById(
     @Param("id") id: string,
-    @Query("userId") userId?: string,
+    @Req() req: Request & { user?: AuthUser },
   ) {
-    return this.forumService.getTopicById(id, userId);
+    return this.forumService.getTopicById(id, req.user?.id);
   }
 
   @Put("topics/:id")
+  @UseGuards(SupabaseAuthGuard)
   async updateTopic(
     @Param("id") id: string,
     @Body() updateTopicDto: UpdateTopicDto,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.updateTopic(id, userId, updateTopicDto);
+    return this.forumService.updateTopic(id, user.id, updateTopicDto);
   }
 
   @Delete("topics/:id")
-  async deleteTopic(@Param("id") id: string, @Query("userId") userId: string) {
-    return this.forumService.deleteTopic(id, userId);
+  @UseGuards(SupabaseAuthGuard)
+  async deleteTopic(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.forumService.deleteTopic(id, user.id);
   }
 
   @Post("topics/:id/like")
-  async likeTopic(@Param("id") id: string, @Query("userId") userId: string) {
-    return this.forumService.likeTopic(id, userId);
+  @UseGuards(SupabaseAuthGuard)
+  async likeTopic(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.forumService.likeTopic(id, user.id);
   }
 
   @Post("topics/:id/bookmark")
+  @UseGuards(SupabaseAuthGuard)
   async bookmarkTopic(
     @Param("id") id: string,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.bookmarkTopic(id, userId);
+    return this.forumService.bookmarkTopic(id, user.id);
   }
 
   @Get("users/:userId/bookmarks")
-  async getUserBookmarks(@Param("userId") userId: string) {
+  @UseGuards(SupabaseAuthGuard)
+  async getUserBookmarks(
+    @Param("userId") userId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (userId !== user.id) {
+      throw new ForbiddenException("You can only view your own bookmarks");
+    }
     return this.forumService.getUserBookmarks(userId);
   }
 
   // ==================== REPLIES ====================
 
   @Post("topics/:topicId/replies")
+  @UseGuards(SupabaseAuthGuard)
   async createReply(
     @Param("topicId") topicId: string,
     @Body() createReplyDto: CreateReplyDto,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.createReply(topicId, userId, createReplyDto);
+    return this.forumService.createReply(topicId, user.id, createReplyDto);
   }
 
   @Put("replies/:id")
+  @UseGuards(SupabaseAuthGuard)
   async updateReply(
     @Param("id") id: string,
     @Body() updateReplyDto: UpdateReplyDto,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.updateReply(id, userId, updateReplyDto);
+    return this.forumService.updateReply(id, user.id, updateReplyDto);
   }
 
   @Delete("replies/:id")
-  async deleteReply(@Param("id") id: string, @Query("userId") userId: string) {
-    return this.forumService.deleteReply(id, userId);
+  @UseGuards(SupabaseAuthGuard)
+  async deleteReply(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.forumService.deleteReply(id, user.id);
   }
 
   @Post("replies/:id/like")
-  async likeReply(@Param("id") id: string, @Query("userId") userId: string) {
-    return this.forumService.likeReply(id, userId);
+  @UseGuards(SupabaseAuthGuard)
+  async likeReply(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.forumService.likeReply(id, user.id);
   }
 
   @Post("topics/:topicId/replies/:replyId/solution")
+  @UseGuards(SupabaseAuthGuard)
   async markAsSolution(
     @Param("topicId") topicId: string,
     @Param("replyId") replyId: string,
-    @Query("userId") userId: string,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.forumService.markAsSolution(replyId, topicId, userId);
+    return this.forumService.markAsSolution(replyId, topicId, user.id);
   }
 }
