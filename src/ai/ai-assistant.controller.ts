@@ -1,36 +1,85 @@
 // src/ai/ai-assistant.controller.ts
-import { Controller, Post, Body, Get, Param, Query } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config"; // Add this import
+import { Controller, Post, Body, Get } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+} from "class-validator";
 import { AiAssistantService } from "./ai-assistant.service";
 
 export class AskQuestionDto {
+  @IsString()
+  @IsNotEmpty()
   question: string;
-  course_id: string;
-  user_id: string;
+
+  @IsString()
+  @IsOptional()
+  course_id?: string;
+
+  @IsString()
+  @IsOptional()
+  user_id?: string;
 }
 
 export class GenerateQuizDto {
-  course_id: string;
+  @IsString()
+  @IsOptional()
+  course_id?: string;
+
+  @IsString()
+  @IsOptional()
   topic?: string;
+
+  @IsNumber()
+  @IsOptional()
   num_questions?: number;
+
+  @IsString()
+  @IsOptional()
   difficulty?: string;
 }
 
 export class ExplainConceptDto {
+  @IsString()
+  @IsNotEmpty()
   concept: string;
-  course_id: string;
+
+  @IsString()
+  @IsOptional()
+  course_id?: string;
+
+  @IsString()
+  @IsOptional()
   level?: string;
 }
 
 export class GenerateSummaryDto {
+  @IsString()
+  @IsNotEmpty()
   course_id: string;
+
+  @IsString()
+  @IsOptional()
   module_id?: string;
+
+  @IsString()
+  @IsOptional()
   lesson_id?: string;
 }
 
 export class SuggestResourcesDto {
+  @IsString()
+  @IsNotEmpty()
   course_id: string;
+
+  @IsString()
+  @IsNotEmpty()
   topic: string;
+
+  @IsNumber()
+  @IsOptional()
   limit?: number;
 }
 
@@ -38,7 +87,7 @@ export class SuggestResourcesDto {
 export class AiAssistantController {
   constructor(
     private readonly aiAssistantService: AiAssistantService,
-    private readonly configService: ConfigService, // Add this
+    private readonly configService: ConfigService,
   ) {}
 
   @Get("health")
@@ -89,7 +138,6 @@ export class AiAssistantController {
         return { error: data.error };
       }
 
-      // Filter models that support generateContent
       const generateContentModels = data.models
         ?.filter((model: any) =>
           model.supportedGenerationMethods?.includes("generateContent"),
