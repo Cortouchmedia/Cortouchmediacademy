@@ -189,6 +189,125 @@ export class CertificatesService {
     return data;
   }
 
+    /**
+   * Issues a certificate when the student has:
+   *   1. 100% lesson progress, AND
+   *   2. All projects in the course approved (status = 'graded')
+   *
+   * Courses with no projects complete on lesson progress alone.
+   * Idempotent — safe to call repeatedly.
+   */
+     async maybeIssueCertificate(userId: string, courseId: string) {
+      const supabase = this.supabaseService.getAdminClient();
+  
+      // 1. Check lesson completion
+      const { data: enrollment } = await supabase
+        .from("course_enrollments")
+        .select("progress_percentage")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+  
+      if (!enrollment || Number(enrollment.progress_percentage) < 100) {
+        return null; // not fully completed yet
+      }
+  
+      // 2. Get all projects for this course
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("course_id", courseId);
+  
+      const projectIds = (projects || []).map((p: any) => p.id);
+  
+      // 3. If the course has projects, all must have a graded submission
+      if (projectIds.length > 0) {
+        const { data: submissions } = await supabase
+          .from("project_submissions")
+          .select("project_id, status")
+          .eq("student_id", userId)
+          .in("project_id", projectIds);
+  
+        const approvedProjects = new Set<string>();
+        (submissions || []).forEach((s: any) => {
+          if (s.status === "graded") approvedProjects.add(s.project_id);
+        });
+  
+        const allApproved = projectIds.every((pid: string) =>
+          approvedProjects.has(pid),
+        );
+  
+        if (!allApproved) return null; // some projects still pending
+      }
+  
+      // 4. Idempotent — return existing if already issued
+      const { data: existing } = await supabase
+        .from("certificates")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("course_id", courseId)
+        .maybeSingle();
+  
+      if (existing) return existing;
+  
+      // 5. Generate identifiers
+      const certificateNumber = `CERT-${new Date().getFullYear()}-${this.generateHash(
+        userId + courseId,
+      ).substring(0, 6)}`;
+  
+      const verificationCode = this.generateHash(userId + courseId + Date.now())
+        .substring(0, 8)
+        .toUpperCase();
+  
+      // 6. Fetch course + user for metadata
+      const [courseResult, userResult] = await Promise.all([
+        supabase.from("courses").select("title").eq("id", courseId).single(),
+        supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", userId)
+          .single(),
+      ]);
+  
+      // 7. Insert (upsert protects against race conditions)
+      const { data, error } = await supabase
+        .from("certificates")
+        .upsert(
+          {
+            user_id: userId,
+            course_id: courseId,
+            certificate_number: certificateNumber,
+            issue_date: new Date(),
+            verification_code: verificationCode,
+            completed_at: new Date(),
+            metadata: {
+              course_title: courseResult.data?.title,
+              user_name: userResult.data?.full_name,
+              grade: "PASS",
+              generated_by: "auto",
+            },
+          },
+          { onConflict: "user_id,course_id", ignoreDuplicates: true },
+        )
+        .select()
+        .maybeSingle();
+  
+      if (error) {
+        this.logger.error(
+          `Certificate insert failed (user=${userId}, course=${courseId}): ${error.message}`,
+        );
+        return null;
+      }
+  
+      if (data) {
+        this.logger.log(
+          `Certificate issued to ${userId} for course ${courseId} (${certificateNumber})`,
+        );
+      }
+  
+      return data;
+    }
+
   async getAllCertificates(limit = 50, offset = 0) {
     const supabase = this.supabaseService.getAdminClient();
 

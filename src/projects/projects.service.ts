@@ -8,6 +8,7 @@ import {
 import { SupabaseService } from "../supabase/supabase.service";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
 import { AiAssistantService } from "../ai/ai-assistant.service";
+import { CertificatesService } from "../certificates/certificates.service";
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -34,6 +35,7 @@ export class ProjectsService {
     private readonly supabaseService: SupabaseService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly aiAssistantService: AiAssistantService,
+    private readonly certificatesService: CertificatesService,
   ) {}
 
   getSupabaseClient() {
@@ -225,7 +227,7 @@ export class ProjectsService {
 
     const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("max_submissions, due_date, title, course_id")
+    .select("max_submissions, due_date, title, course_id, instructor_id")
     .eq("id", submitDto.project_id)
     .single();
 
@@ -318,6 +320,15 @@ export class ProjectsService {
       );
     }
 
+    const instructorId = (project as any).instructor_id;
+    if (instructorId && submission?.id) {
+      this.aiGradeSubmission(submission.id, instructorId).catch((err: any) => {
+        this.logger.warn(
+          `Auto AI grading failed for submission ${submission.id}: ${err?.message ?? err}`,
+        );
+      });
+    }
+
     return {
       success: true,
       message: "Project submitted successfully",
@@ -325,7 +336,6 @@ export class ProjectsService {
       isLate,
     };
   }
-
   async getStudentSubmissions(studentId: string, projectId?: string) {
     const supabase = this.getSupabaseClient();
 
@@ -422,6 +432,21 @@ export class ProjectsService {
   async gradeSubmission(submissionId: string, gradeDto: GradeSubmissionDto) {
     const supabase = this.getSupabaseClient();
 
+    // Fetch student + course BEFORE updating so we can check the certificate after
+    const { data: preFetch, error: fetchErr } = await supabase
+      .from("project_submissions")
+      .select(`
+        id,
+        student_id,
+        project:project_id(course_id)
+      `)
+      .eq("id", submissionId)
+      .single();
+
+    if (fetchErr || !preFetch) {
+      throw new NotFoundException("Submission not found");
+    }
+
     const { data: submission, error } = await supabase
       .from("project_submissions")
       .update({
@@ -440,6 +465,21 @@ export class ProjectsService {
       throw new BadRequestException(
         `Failed to grade submission: ${error.message}`,
       );
+    }
+
+    // After grading, check if this unlocks the certificate
+    const courseId = (preFetch as any).project?.course_id;
+    if (courseId && preFetch.student_id) {
+      try {
+        await this.certificatesService.maybeIssueCertificate(
+          preFetch.student_id,
+          courseId,
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `Certificate check after grading failed: ${err?.message ?? err}`,
+        );
+      }
     }
 
     return {

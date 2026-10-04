@@ -6,12 +6,16 @@ import {
   Logger,
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
+import { CertificatesService } from "../certificates/certificates.service";
 
 @Injectable()
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly certificatesService: CertificatesService,
+  ) {}
 
   // ==================== COURSE MANAGEMENT ====================
 
@@ -982,7 +986,17 @@ export class CoursesService {
         );
         return;
       }
-  
+
+    // After reaching 100%, try to issue the certificate if all projects are done
+    if (isCompleted) {
+      try {
+        await this.certificatesService.maybeIssueCertificate(userId, courseId);
+      } catch (err: any) {
+        this.logger.warn(
+          `Certificate check after lesson completion failed: ${err?.message ?? err}`,
+        );
+      }
+    }
   }
   
  
