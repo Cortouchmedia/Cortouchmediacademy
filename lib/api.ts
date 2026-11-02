@@ -222,12 +222,12 @@ export const Api = {
       };
     }>('/auth/profile', token),
 
-  updateUser: (
-    id: string,
-    body: { full_name?: string; role?: string },
-    token: string,
-  ) => api.put(`/auth/users?id=${id}`, body, token),
-},
+    updateUser: (
+      id: string,
+      body: { full_name?: string },
+      token: string,
+    ) => api.put(`/auth/users?id=${id}`, body, token),
+  },
 
  // Courses
  courses: {

@@ -12,7 +12,6 @@ interface AdminDashboardProps {
 }
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: string; color: string; onClick?: () => void }> = ({ title, value, icon, color, onClick }) => {
-  // Extract the color name without 'bg-' prefix for text color
   const textColor = color.replace('bg-', 'text-');
   
   return (

@@ -25,10 +25,16 @@ const initialFormState = {
 };
 
 export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, onSelectCourseToEdit, onDeleteCourse }) => {
-    const { logAuditEvent } = useAppContext();
+    const { logAuditEvent, currentUser, handleUserUpdate } = useAppContext();
     const [courseData, setCourseData] = useState(initialFormState);
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    
+    // State for role management
+    const [savingUserId, setSavingUserId] = useState<string | null>(null);
+    const [roleError, setRoleError] = useState<string | null>(null);
+
+    const isSuperAdmin = currentUser?.role === 'superadmin';
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -64,11 +70,27 @@ export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, on
         );
     };
 
+    const handleRoleChange = async (userId: string, newRole: string) => {
+        const targetUser = users.find(u => u.id === userId);
+        if (!targetUser) return;
+
+        setSavingUserId(userId);
+        setRoleError(null);
+
+        const result = await handleUserUpdate({ ...targetUser, role: newRole as any });
+
+        setSavingUserId(null);
+        if (!result.success) {
+            setRoleError(result.error || 'Failed to update role');
+        }
+    };
+
     return (
         <div className="space-y-8">
+            {/* ==================== COURSE MANAGEMENT ==================== */}
             <div>
-                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Course Management</h1>
-                <p className="text-brand-muted mt-1 font-medium">Create and manage your academy's curriculum.</p>
+                <h1 className="text-3xl font-black text-gray-900 tracking-tight">Platform Management</h1>
+                <p className="text-brand-muted mt-1 font-medium">Manage curriculum and platform users.</p>
             </div>
             
             <div className="bg-brand-surface rounded-xl p-6 md:p-8 border border-gray-200 shadow-sm">
@@ -180,6 +202,59 @@ export const Admin: React.FC<AdminProps> = ({ users, courses, onAddNewCourse, on
                             </div>
                         </div>
                     ))}
+                </div>
+            </div>
+
+            {/* ==================== USER MANAGEMENT ==================== */}
+            <div className="bg-brand-surface rounded-xl p-4 lg:p-8 border border-gray-200 shadow-sm mt-8">
+                <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-6">User Management</h2>
+                
+                {roleError && (
+                    <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm">
+                        {roleError}
+                    </div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-gray-200 text-sm text-brand-muted">
+                                <th className="py-3 px-4 font-semibold">Name</th>
+                                <th className="py-3 px-4 font-semibold">Email</th>
+                                <th className="py-3 px-4 font-semibold">Role</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map(user => (
+                                <tr key={user.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{user.name}</td>
+                                    <td className="py-3 px-4 text-sm text-brand-muted">{user.email}</td>
+                                    <td className="py-3 px-4">
+                                        {isSuperAdmin ? (
+                                            <select
+                                                value={user.role}
+                                                onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                                                disabled={savingUserId === user.id || user.id === currentUser?.id}
+                                                className="border border-gray-300 rounded px-2 py-1 text-sm bg-white focus:outline-none focus:border-brand-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="student">Student</option>
+                                                <option value="instructor">Instructor</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="superadmin">Superadmin</option>
+                                            </select>
+                                        ) : (
+                                            <span className="inline-block px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-semibold uppercase tracking-wider">
+                                                {user.role}
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {users.length === 0 && (
+                        <p className="text-sm text-brand-muted mt-4 text-center">No users loaded from the database yet.</p>
+                    )}
                 </div>
             </div>
         </div>

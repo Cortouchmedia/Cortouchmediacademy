@@ -26,7 +26,7 @@ export default function AdminCoursesPage() {
     handleApproveGrade,
   } = useAppContext();
 
-  if (!currentUser || currentUser.role !== "admin") return null;
+  if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "superadmin")) return null;
 
   if (editingCourse) {
     return (

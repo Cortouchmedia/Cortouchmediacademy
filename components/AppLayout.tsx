@@ -18,14 +18,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const {
     isLoggedIn, currentUser, currentPage, selectedCourse, editingCourse, completedCourse,
     isChatOpen, isBotTyping, messages, searchQuery,
-    handleLogin, handleLogout, handleNavigate, handleSearchChange,
+    handleLogout, handleNavigate, handleSearchChange,
     setIsChatOpen, setCompletedCourse, courses
   } = useAppContext();
 
   const pathname = usePathname();
   const router = useRouter();
 
-  // Sync URL → currentPage (for sidebar highlighting etc.)
+  // Determine roles immediately
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+  const isAdminRoute = pathname.startsWith('/admin') || isAdmin;
+
+  // 1. FORCE ADMINS OUT OF STUDENT/INSTRUCTOR ROUTES
+  React.useEffect(() => {
+    if (isLoggedIn && currentUser && isAdmin) {
+      const path = pathname.split('/')[1];
+      if (path === 'student-dashboard' || path === 'instructor-dashboard') {
+        router.replace('/admin');
+      }
+    }
+  }, [isLoggedIn, currentUser, isAdmin, pathname, router]);
+
+  // 2. Sync URL → currentPage (for sidebar highlighting)
   React.useEffect(() => {
     if (isLoggedIn && currentUser) {
       const path = pathname.split('/')[1];
@@ -46,18 +60,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, isLoggedIn, currentUser, handleNavigate]);
 
-  // Root redirect based on role
+  // 3. Root redirect based on role
   React.useEffect(() => {
     if (isLoggedIn && currentUser && pathname === '/') {
-      if (currentUser.role === 'admin') router.push('/admin');
+      if (isAdmin) router.push('/admin');
       else if (currentUser.role === 'instructor') router.push('/instructor-dashboard');
       else router.push('/student-dashboard');
     }
-  }, [isLoggedIn, currentUser, pathname, router]);
+  }, [isLoggedIn, currentUser, pathname, router, isAdmin]);
 
   const [authView, setAuthView] = React.useState<'landing' | 'signIn' | 'signUp'>('landing');
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-  const isAdminRoute = pathname.startsWith('/admin');
 
   const handleNavigateToSignUp = () => {
     router.push('/signup');
@@ -69,15 +82,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   // ----------------------------------------------------------
-  // Not authenticated: route to the appropriate public page
+  // Not authenticated
   // ----------------------------------------------------------
   if (!isLoggedIn || !currentUser) {
-    if (pathname === '/login') {
-      return <SignInPage />;
-    }
-    if (pathname === '/signup') {
-      return <SignUpPage />;
-    }
+    if (pathname === '/login') return <SignInPage />;
+    if (pathname === '/signup') return <SignUpPage />;
     if (pathname === '/') {
       return (
         <LandingPage
@@ -87,9 +96,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       );
     }
-
-    // ✅ Any other route: render the child page.
-    // The child page (e.g. /student-dashboard) redirects to /login if needed.
     return <>{children}</>;
   }
 
@@ -112,7 +118,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}
 
           <div className={`fixed inset-y-0 left-0 z-50 transform lg:relative lg:translate-x-0 transition duration-200 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:block`}>
-            {isAdminRoute && currentUser.role === 'admin' ? (
+            {/* IF ADMIN, ALWAYS SHOW ADMIN SIDEBAR */}
+            {isAdmin ? (
               <AdminSidebar user={currentUser} onLogout={handleLogout} />
             ) : (
               <Sidebar user={currentUser} activePage={currentPage} />
@@ -123,7 +130,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Header
               user={currentUser}
               currentPage={
-                isAdminRoute ? 'Admin Portal' :
+                isAdmin ? 'Admin Portal' :
                 searchQuery ? 'Search Results' :
                 editingCourse ? 'Edit Course' :
                 selectedCourse ? 'Course Details' :
@@ -140,13 +147,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 router.push('/profile');
               }}
             />
+            
             <div className="p-4 lg:p-8 overflow-y-auto flex-1">
               {children}
             </div>
             <Footer />
           </main>
 
-          {!isAdminRoute && (
+          {!isAdmin && (
             <ChatWidget
               isOpen={isChatOpen}
               onToggle={() => setIsChatOpen(!isChatOpen)}

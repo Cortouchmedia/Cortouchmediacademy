@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useMemo, useEffect, useCall
 import { GoogleGenAI } from '@google/genai';
 import type { Page, Course, User, ChatMessage, CourseWithEnrollment, AuditLog, PayoutRequest, InstructorMessage, Lesson, Webinar } from '../types';
 import { Api, authStorage, api } from '../lib/api';
+import { ApiAdmin } from '../lib/ApiAdmin';
 
 interface AppContextType {
   isLoggedIn: boolean;
@@ -42,7 +43,7 @@ interface AppContextType {
   handleNavigate: (page: Page) => void;
   handleCourseSelect: (course: Course) => void;
   handleSearchChange: (query: string) => void;
-  handleUserUpdate: (updatedUser: User) => void;
+  handleUserUpdate: (updatedUser: User) => Promise<{ success: boolean; error?: string }>;
   handleUserDelete: (userId: string) => void;
   handleUserAdd: (userData: Omit<User, 'id' | 'enrolledCourseIds'>) => void;
   handleEnrollmentSuccess: (courseId: number | string) => Promise<void>;
@@ -290,6 +291,42 @@ useEffect(() => {
 }, [courses]);
 
 
+// ---- Effect 3: Fetch real users if logged in as Admin or Superadmin ----
+useEffect(() => {
+  if (typeof window === 'undefined') return;
+  if (!isLoggedIn || !currentUser?.id) return;
+  if (currentUser.role !== 'admin' && currentUser.role !== 'superadmin') return;
+
+  const token = authStorage.getToken();
+  if (!token) return;
+
+  let cancelled = false;
+
+  (async () => {
+    try {
+      const rows = await ApiAdmin.listUsers(token);
+      if (cancelled) return;
+
+      const mappedUsers: User[] = rows.map((u) => ({
+        id: u.id,
+        name: u.full_name ?? u.email,
+        email: u.email,
+        avatarUrl: u.avatar_url ?? '',
+        role: u.role,
+        enrolledCourseIds: [],
+      }));
+
+      setUsers(mappedUsers);
+    } catch (err) {
+      console.error('Failed to load users:', err);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [isLoggedIn, currentUser?.id, currentUser?.role]);
+
   const logAuditEvent = (action: string, details: string, type: AuditLog['type']) => {
     const newLog: AuditLog = {
       id: Math.max(...auditLogs.map((l) => l.id), 0) + 1,
@@ -353,9 +390,10 @@ useEffect(() => {
       const profileData = await Api.auth.profile(result.session.access_token);
       const rawRole = (profileData.profile?.role ?? 'STUDENT').toString().toLowerCase();
       const role: User['role'] =
-        rawRole === 'admin' || rawRole === 'superadmin' || rawRole === 'instructor' || rawRole === 'student'
-          ? ((rawRole === 'superadmin' ? 'admin' : rawRole) as User['role'])
-          : 'student';
+        rawRole === 'superadmin' ? 'superadmin'
+        : rawRole === 'admin' ? 'admin'
+        : rawRole === 'instructor' ? 'instructor'
+        : 'student';
       const realUser: User = {
         id: profileData.id,
         name: profileData.profile?.full_name ?? profileData.email,
@@ -407,10 +445,48 @@ useEffect(() => {
     }
   };
 
-  const handleUserUpdate = (updatedUser: User) => {
-    if (currentUser && currentUser.id === updatedUser.id) setCurrentUser(updatedUser);
-    logAuditEvent('User Updated', `Updated user: ${updatedUser.name} (${updatedUser.role})`, 'user');
-    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+  const handleUserUpdate = async (
+    updatedUser: User,
+  ): Promise<{ success: boolean; error?: string }> => {
+    const token = authStorage.getToken();
+    if (!token) {
+      return { success: false, error: 'Not signed in' };
+    }
+  
+    const previous = users.find((u) => u.id === updatedUser.id);
+  
+    // Optimistic update
+    setUsers((prev) =>
+      prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)),
+    );
+    if (currentUser && currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+  
+    try {
+      // Only the role change goes to the backend.
+      // Name changes use a different endpoint (Api.auth.updateUser).
+      if (previous && previous.role !== updatedUser.role) {
+        await ApiAdmin.updateUserRole(updatedUser.id, updatedUser.role, token);
+      }
+      logAuditEvent(
+        'User Updated',
+        `Updated user: ${updatedUser.name} (${updatedUser.role})`,
+        'user',
+      );
+      return { success: true };
+    } catch (err: any) {
+      
+      if (previous) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === updatedUser.id ? previous : u)),
+        );
+        if (currentUser && currentUser.id === updatedUser.id) {
+          setCurrentUser(previous);
+        }
+      }
+      return { success: false, error: err?.message ?? 'Failed to update user' };
+    }
   };
 
   const handleUserDelete = (userId: string) => {
