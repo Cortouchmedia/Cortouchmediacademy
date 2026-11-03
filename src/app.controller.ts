@@ -10,12 +10,12 @@ export class AppController {
     private readonly supabaseService: SupabaseService,
   ) {}
 
-  @Get() // This handles /api
+  @Get() 
   getRoot(): string {
     return 'Backend API is running';
   }
 
-  @Get('info') // This handles /api/info
+  @Get('info') 
   getApiInfo() {
     return {
       message: 'Backend API Information',

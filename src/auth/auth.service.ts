@@ -273,7 +273,7 @@ export class AuthService {
       if (error) {
         this.logger.error(
           `Profile creation error for ${userId}: ${error.message}`,
-        );
+        );    ``
         return null;
       }
 
