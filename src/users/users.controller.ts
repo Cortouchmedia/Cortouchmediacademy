@@ -14,7 +14,7 @@ import { SupabaseService } from "../supabase/supabase.service";
 import { userProfileDto } from "./dto/user-profile.dto"; 
 import { ParseUuidPipe } from '../common/pipes/parse-uuid.pipe';
 
-@Controller("auth/users") 
+@Controller("api/auth/users")
 @UseGuards(AuthGuard('jwt')) 
 export class UsersController {
   constructor(
