@@ -12,6 +12,41 @@ export class AuthService {
 
   constructor(private readonly supabaseService: SupabaseService) {}
 
+  // 👈 Helper function to save audit logs to Supabase
+  private async saveAuditLog(
+    userId: string | undefined,
+    action: string,
+    type: "auth" | "user" | "course" | "system",
+    details: string,
+  ) {
+    try {
+      const supabaseAdmin = this.supabaseService.getAdminClient();
+      if (!supabaseAdmin) {
+        console.error("❌ [AuditLog] No admin client available!");
+        return;
+      }
+
+      console.log(`📝 [AuditLog] Attempting to save: ${action}`);
+
+      const { error } = await supabaseAdmin.from("audit_logs").insert([
+        {
+          user_id: userId || null,
+          action,
+          type,
+          details,
+        },
+      ]);
+
+      if (error) {
+        console.error("❌ [AuditLog] Supabase Error:", error);
+      } else {
+        console.log("✅ [AuditLog] Saved successfully!");
+      }
+    } catch (error) {
+      console.error(`❌ [AuditLog] Failed to save: ${error}`);
+    }
+  }
+
   async signup(
     email: string,
     full_name: string,
@@ -34,8 +69,6 @@ export class AuthService {
       throw new BadRequestException("Password must be at least 6 characters");
     }
 
-    // Only self-service roles can be claimed at signup.
-    // ADMIN and SUPERADMIN are granted, never claimed.
     const SELF_SIGNUP_ROLES = ["STUDENT", "INSTRUCTOR"] as const;
     type SelfSignupRole = (typeof SELF_SIGNUP_ROLES)[number];
 
@@ -89,6 +122,14 @@ export class AuthService {
       // Auto-create profile in profiles table using admin client to bypass RLS
       if (authData.user) {
         await this.createUserProfile(authData.user.id, email, full_name, role);
+        
+        // 👈 Save the Audit Log for Signup
+        await this.saveAuditLog(
+          authData.user.id,
+          "User Registration",
+          "user",
+          `${full_name} (${email}) created an account as ${role}.`,
+        );
       }
 
       return {
@@ -143,6 +184,16 @@ export class AuthService {
       }
 
       this.logger.log(`Signin successful for email: ${email}`);
+
+      // 👈 Save the Audit Log for Login
+      if (data.user) {
+        await this.saveAuditLog(
+          data.user.id,
+          "User Login",
+          "auth",
+          `${email} successfully logged in.`,
+        );
+      }
 
       return {
         message: "Signin successful",

@@ -120,7 +120,7 @@ export class AuthController {
     };
   }
 
-  @Put('users')
+  @Put('users/:id/role')
   async updateUser(
     @Query('id') userId: string,
     @Body() updateData: UpdateUserDto,
