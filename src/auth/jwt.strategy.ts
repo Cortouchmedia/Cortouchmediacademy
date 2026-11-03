@@ -15,7 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         jwksRequestsPerMinute: 5,
         jwksUri: `${process.env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`,
       }),
-      algorithms:
+      algorithms: ['ES256'], 
     });
   }
 
