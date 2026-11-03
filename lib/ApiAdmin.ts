@@ -61,9 +61,9 @@ export const ApiAdmin = {
   approvePayout: (payoutId: string, token: string) =>
     api.post<{ message: string }>(`/admin/payouts/${payoutId}/approve`, {}, token),
 
- viewAuditLogs: (token: string) =>
-    api.get<Array<{ id: string; actor_id: string; action: string; created_at: string }>>(
-      '/admin/audit-logs',
+    viewAuditLogs: (token: string) =>
+    api.get<Array<{ id: string; action: string; type: string; details: string; created_at: string }>>(
+      '/auth/users/audit-logs', 
       token,
     ),
 };

@@ -1,5 +1,4 @@
-
- const API_URL =
+const API_URL =
  process.env.NEXT_PUBLIC_API_URL ?? 'https://cortouchmediacademy-production.up.railway.app/api';
 
 if (typeof window !== 'undefined') {
@@ -574,6 +573,58 @@ forum: {
   verify: (code: string) => api.get(`/certificates/verify/${code}`),
   get: (id: string) => api.get(`/certificates/${id}`),
 },
+};
+
+// ============================================================
+// Admin API (merged here to fix casing/import issues)
+// ============================================================
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: 'student' | 'instructor' | 'admin' | 'superadmin';
+  avatar_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserRoleUpdateResponse {
+  message: string;
+  user: AdminUser;
+}
+
+export const ApiAdmin = {
+  updateUserRole: (userId: string, role: string, token: string) =>
+    api.put<UserRoleUpdateResponse>(
+      `/auth/users/${userId}/role`,
+      { role },
+      token,
+    ),
+
+  listUsers: (token: string) =>
+    api.get<AdminUser[]>('/auth/users', token),
+
+  getUser: (userId: string, token: string) =>
+    api.get<AdminUser>(`/auth/users/${userId}`, token),
+
+  deleteUser: (userId: string, token: string) =>
+    api.delete<{ message: string }>(`/auth/users/${userId}`, token),
+
+  listPayouts: (token: string) =>
+    api.get<Array<{ id: string; instructor_id: string; amount: number; status: string }>>(
+      '/admin/payouts',
+      token,
+    ),
+
+  approvePayout: (payoutId: string, token: string) =>
+    api.post<{ message: string }>(`/admin/payouts/${payoutId}/approve`, {}, token),
+
+  viewAuditLogs: (token: string) =>
+    api.get<Array<{ id: string; action: string; type: string; details: string; created_at: string }>>(
+      '/auth/users/audit-logs', 
+      token,
+    ),
 };
 
 export default api;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -18,12 +18,12 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { useAppContext } from '../../../context/AppContext';
+import { api, authStorage } from '../../../lib/api';
+import { ApiAdmin } from '../../../lib/ApiAdmin';
 import { Icon } from '../../../components/Icon';
 
 const COLORS = ['#219BD5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
-// Generate realistic revenue data for the last 7/30 days
 const generateRevenueData = (days: number) => {
   return Array.from({ length: days }, (_, i) => ({
     day: `Day ${i + 1}`,
@@ -32,7 +32,6 @@ const generateRevenueData = (days: number) => {
   }));
 };
 
-// Generate monthly data
 const generateMonthlyData = () => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return months.map((month, index) => ({
@@ -43,72 +42,79 @@ const generateMonthlyData = () => {
 };
 
 export default function AdminReportsPage() {
-  const { currentUser, courses, users } = useAppContext();
+  // Direct state instead of useAppContext
+  const [users, setUsers] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [selectedPeriod, setSelectedPeriod] = useState<'7days' | '30days' | '12months'>('7days');
   const [revenueData, setRevenueData] = useState(generateRevenueData(7));
   const [monthlyData] = useState(generateMonthlyData());
 
-  if (!currentUser || currentUser.role !== 'admin') return null;
+  // Fetch data directly on mount
+  useEffect(() => {
+    const token = authStorage.getToken();
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
-  // Calculate totals
+    Promise.all([
+      ApiAdmin.listUsers(token).catch(() => []),
+      api.get('/courses').catch(() => [])
+    ]).then(([usersData, coursesData]) => {
+      setUsers((usersData as any[]) || []);
+      setCourses((coursesData as any[]) || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const handlePeriodChange = (period: '7days' | '30days' | '12months') => {
+    setSelectedPeriod(period);
+    if (period === '7days') setRevenueData(generateRevenueData(7));
+    else if (period === '30days') setRevenueData(generateRevenueData(30));
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading Reports...</div>;
+
+  // Calculate totals safely
   const totalEnrollments = users.reduce((acc, user) => acc + (user.enrolledCourseIds?.length || 0), 0);
-  const totalRevenue = courses.reduce((acc, course) => acc + ((course.price || 0) * (course.enrollmentCount || 0)), 0);
+  const totalRevenue = courses.reduce((acc, course) => acc + ((Number(course.price) || 0) * (Number(course.enrollmentCount || course.enrollment_count) || 0)), 0);
+  
   const lastPeriodRevenue = revenueData.reduce((acc, day) => acc + day.revenue, 0);
   const previousPeriodRevenue = lastPeriodRevenue * 0.875;
   const revenueGrowth = ((lastPeriodRevenue - previousPeriodRevenue) / previousPeriodRevenue * 100).toFixed(1);
 
-  // Update data when period changes
-  const handlePeriodChange = (period: '7days' | '30days' | '12months') => {
-    setSelectedPeriod(period);
-    if (period === '7days') {
-      setRevenueData(generateRevenueData(7));
-    } else if (period === '30days') {
-      setRevenueData(generateRevenueData(30));
-    }
-  };
-
-  // Course performance data
   const coursePerformance = courses
     .map(course => ({
       name: course.title?.length > 20 ? course.title.substring(0, 20) + '...' : course.title || 'Untitled',
-      students: course.enrollmentCount || 0,
-      revenue: (course.price || 0) * (course.enrollmentCount || 0),
+      students: course.enrollmentCount || course.enrollment_count || 0,
+      revenue: (course.price || 0) * (course.enrollmentCount || course.enrollment_count || 0),
     }))
     .sort((a, b) => b.students - a.students)
     .slice(0, 6);
 
-  // Category distribution
   const categoryData = courses.reduce((acc, course) => {
     const category = course.category || 'Uncategorized';
     const existing = acc.find(item => item.name === category);
     if (existing) {
       existing.value++;
-      existing.enrollments += course.enrollmentCount || 0;
+      existing.enrollments += course.enrollmentCount || course.enrollment_count || 0;
     } else {
-      acc.push({
-        name: category,
-        value: 1,
-        enrollments: course.enrollmentCount || 0,
-      });
+      acc.push({ name: category, value: 1, enrollments: course.enrollmentCount || course.enrollment_count || 0 });
     }
     return acc;
   }, [] as { name: string; value: number; enrollments: number }[]);
 
-  // Calculate percentages for category distribution
   const totalCourses = courses.length;
   const categoryPercentages = categoryData.map(cat => ({
     ...cat,
-    percentage: ((cat.value / totalCourses) * 100).toFixed(0),
+    percentage: totalCourses > 0 ? ((cat.value / totalCourses) * 100).toFixed(0) : '0',
   }));
 
-  // Custom currency formatter
   const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `₦${(value / 1000000).toFixed(1)}M`;
-    }
-    if (value >= 1000) {
-      return `₦${(value / 1000).toFixed(0)}K`;
-    }
+    if (value >= 1000000) return `₦${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `₦${(value / 1000).toFixed(0)}K`;
     return `₦${value}`;
   };
 
@@ -126,8 +132,7 @@ export default function AdminReportsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-8 p-8">
       <div>
         <h1 className="text-3xl font-black text-gray-900 tracking-tight">Reports & Analytics</h1>
         <p className="text-brand-muted mt-1 font-medium">Detailed insights into your academy's growth.</p>
@@ -177,117 +182,43 @@ export default function AdminReportsPage() {
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-gray-900">Revenue Growth</h3>
           <div className="flex gap-2">
-            <button
-              onClick={() => handlePeriodChange('7days')}
-              className={`px-3 py-1 text-sm font-bold rounded-lg transition-colors ${
-                selectedPeriod === '7days'
-                  ? 'bg-[#219BD5] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Last 7 Days
-            </button>
-            <button
-              onClick={() => handlePeriodChange('30days')}
-              className={`px-3 py-1 text-sm font-bold rounded-lg transition-colors ${
-                selectedPeriod === '30days'
-                  ? 'bg-[#219BD5] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Last 30 Days
-            </button>
-            <button
-              onClick={() => handlePeriodChange('12months')}
-              className={`px-3 py-1 text-sm font-bold rounded-lg transition-colors ${
-                selectedPeriod === '12months'
-                  ? 'bg-[#219BD5] text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              Last 12 Months
-            </button>
+            {['7days', '30days', '12months'].map((p) => (
+              <button
+                key={p}
+                onClick={() => handlePeriodChange(p as any)}
+                className={`px-3 py-1 text-sm font-bold rounded-lg transition-colors ${
+                  selectedPeriod === p ? 'bg-[#219BD5] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {p === '7days' ? 'Last 7 Days' : p === '30days' ? 'Last 30 Days' : 'Last 12 Months'}
+              </button>
+            ))}
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3">
-            {selectedPeriod === '12months' ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={monthlyData}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#219BD5" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#219BD5" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="month" stroke="#6B7280" />
-                  <YAxis
-                    stroke="#6B7280"
-                    tickFormatter={(value) => formatCurrency(value)}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#219BD5"
-                    strokeWidth={2}
-                    fill="url(#revenueGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={revenueData}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#219BD5" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#219BD5" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="day" stroke="#6B7280" />
-                  <YAxis
-                    stroke="#6B7280"
-                    tickFormatter={(value) => formatCurrency(value)}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [formatCurrency(value), 'Revenue']}
-                    contentStyle={{
-                      backgroundColor: 'white',
-                      border: '1px solid #E5E7EB',
-                      borderRadius: '8px',
-                      padding: '8px 12px',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#219BD5"
-                    strokeWidth={2}
-                    fill="url(#revenueGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+            <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={(selectedPeriod === '12months' ? monthlyData : revenueData) as any[]}>
+                <defs>
+                  <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#219BD5" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#219BD5" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey={selectedPeriod === '12months' ? 'month' : 'day'} stroke="#6B7280" />
+                <YAxis stroke="#6B7280" tickFormatter={(value) => formatCurrency(value)} />
+                <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
+                <Area type="monotone" dataKey="revenue" stroke="#219BD5" strokeWidth={2} fill="url(#revenueGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
 
           <div className="bg-gray-50 rounded-xl p-4 flex flex-col justify-center">
             <p className="text-sm text-gray-500 mb-2">Total Revenue</p>
             <p className="text-3xl font-black text-gray-900">
-              {formatCurrency(selectedPeriod === '12months' 
-                ? monthlyData.reduce((acc, month) => acc + month.revenue, 0)
-                : lastPeriodRevenue
-              )}
+              {formatCurrency(selectedPeriod === '12months' ? monthlyData.reduce((acc, m) => acc + m.revenue, 0) : lastPeriodRevenue)}
             </p>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-green-600 font-bold text-sm">+{revenueGrowth}%</span>
@@ -299,33 +230,16 @@ export default function AdminReportsPage() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Enrollment by Category */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Enrollment by Category</h3>
           {categoryData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={true}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                  <Pie data={categoryData} cx="50%" cy="50%" labelLine={true} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} outerRadius={80} fill="#8884d8" dataKey="value">
+                    {categoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string, props: any) => [
-                      `${value} courses (${props.payload.enrollments} enrollments)`,
-                      'Category',
-                    ]}
-                  />
+                  <Tooltip formatter={(value: number) => [`${value} courses`, 'Category']} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -337,24 +251,15 @@ export default function AdminReportsPage() {
                       <span className="text-brand-muted">{cat.percentage}%</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${cat.percentage}%`,
-                          backgroundColor: COLORS[i % COLORS.length],
-                        }}
-                      />
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${cat.percentage}%`, backgroundColor: COLORS[i % COLORS.length] }} />
                     </div>
                   </div>
                 ))}
               </div>
             </>
-          ) : (
-            <div className="text-center py-12 text-gray-500">No category data available</div>
-          )}
+          ) : <div className="text-center py-12 text-gray-500">No category data</div>}
         </div>
 
-        {/* Top Performing Courses */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h3 className="text-xl font-bold text-gray-900 mb-6">Top Performing Courses</h3>
           {coursePerformance.length > 0 ? (
@@ -363,15 +268,11 @@ export default function AdminReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis type="number" stroke="#6B7280" />
                 <YAxis type="category" dataKey="name" stroke="#6B7280" width={100} />
-                <Tooltip
-                  formatter={(value: number) => [`${value} students`, 'Enrollments']}
-                />
+                <Tooltip formatter={(value: number) => [`${value} students`, 'Enrollments']} />
                 <Bar dataKey="students" fill="#219BD5" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="text-center py-12 text-gray-500">No course data available</div>
-          )}
+          ) : <div className="text-center py-12 text-gray-500">No course data</div>}
         </div>
       </div>
 
@@ -383,58 +284,11 @@ export default function AdminReportsPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
             <XAxis dataKey="month" stroke="#6B7280" />
             <YAxis stroke="#6B7280" />
-            <Tooltip
-              formatter={(value: number) => [`${value} enrollments`, 'Enrollments']}
-              contentStyle={{
-                backgroundColor: 'white',
-                border: '1px solid #E5E7EB',
-                borderRadius: '8px',
-              }}
-            />
+            <Tooltip formatter={(value: number) => [`${value} enrollments`, 'Enrollments']} />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey="enrollments"
-              stroke="#10B981"
-              strokeWidth={3}
-              dot={{ fill: '#10B981', r: 4 }}
-              name="Enrollments"
-            />
+            <Line type="monotone" dataKey="enrollments" stroke="#10B981" strokeWidth={3} dot={{ fill: '#10B981', r: 4 }} name="Enrollments" />
           </LineChart>
         </ResponsiveContainer>
-      </div>
-
-      {/* Export Section */}
-      <div className="bg-gradient-to-r from-[#1e3a5f] to-[#219BD5] p-6 rounded-xl shadow-xl relative overflow-hidden">
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/20 rounded-full blur-2xl"></div>
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6 relative z-10">
-          <div className="text-white">
-            <h3 className="text-xl font-bold mb-2">Export Data</h3>
-            <p className="text-sm text-white/80">Download your academy data in CSV or PDF format for offline analysis.</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                console.log('Exporting as CSV...');
-                alert('CSV export would be implemented here');
-              }}
-              className="px-6 py-3 bg-white text-[#1e3a5f] font-bold rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-2"
-            >
-              <Icon name="download" className="w-5 h-5" />
-              CSV
-            </button>
-            <button
-              onClick={() => {
-                console.log('Exporting as PDF...');
-                alert('PDF export would be implemented here');
-              }}
-              className="px-6 py-3 bg-[#219BD5] text-white font-bold rounded-lg hover:bg-[#1a7aa8] transition-colors flex items-center gap-2 border border-white/20"
-            >
-              <Icon name="document" className="w-5 h-5" />
-              PDF Report
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

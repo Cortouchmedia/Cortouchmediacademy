@@ -270,7 +270,11 @@ useEffect(() => {
         prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
       );
     } catch (err) {
-      console.error('Failed to load enrollments:', err);
+      console.warn('Could not load enrollments (normal for admins):', err);
+    
+      setCurrentUser((prev) =>
+        prev ? { ...prev, enrolledCourseIds: [] } : prev,
+      );
     }
   })();
 
