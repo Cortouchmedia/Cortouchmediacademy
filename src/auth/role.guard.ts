@@ -19,18 +19,17 @@ export class RoleGuard extends AuthGuard("jwt") {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // 1. Run the JWT guard first — populates req.user
+    // 1. Passport verifies the Supabase token via JWKS (JwtStrategy)
     const ok = (await super.canActivate(context)) as boolean;
     if (!ok) throw new UnauthorizedException("Not authenticated");
 
     const req = context.switchToHttp().getRequest();
-    const userId = req.user?.sub ?? req.user?.id;
-
+    const userId = req.user?.sub ?? req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException("JWT is missing a subject claim");
     }
 
-    // 2. Load the REAL role from the DB (never trust the JWT claim)
+    // 2. Load the REAL role from the DB — never trust the JWT claim
     const { data, error } = await this.supabaseService
       .getAdminClient()
       .from("profiles")
@@ -43,13 +42,19 @@ export class RoleGuard extends AuthGuard("jwt") {
     }
 
     const role = String(data.role).toUpperCase() as Role;
+
+    // 3. Superadmin bypasses every role check in the app
+    if (role === "SUPERADMIN") {
+      req.user.role = role;
+      return true;
+    }
+
     if (!this.allowed.includes(role)) {
       throw new ForbiddenException(
         `Requires one of: ${this.allowed.join(", ")}`,
       );
     }
 
-    // 3. Attach the DB-verified role for downstream controllers
     req.user.role = role;
     return true;
   }

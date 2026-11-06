@@ -1,7 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AppService } from './app.service';
 import { SupabaseService } from './supabase/supabase.service';
-import { AuthGuard } from '@nestjs/passport';
+import { SuperAdminGuard } from './auth/superadmin.guard';
 
 @Controller('api')
 export class AppController {
@@ -10,12 +10,12 @@ export class AppController {
     private readonly supabaseService: SupabaseService,
   ) {}
 
-  @Get() 
+  @Get()
   getRoot(): string {
     return 'Backend API is running';
   }
 
-  @Get('info') 
+  @Get('info')
   getApiInfo() {
     return {
       message: 'Backend API Information',
@@ -29,9 +29,9 @@ export class AppController {
           signin: '/api/auth/signin',
           signout: '/api/auth/signout',
           profile: '/api/auth/profile',
-          users: '/api/auth/users'
-        }
-      }
+          users: '/api/auth/users',
+        },
+      },
     };
   }
 
@@ -41,7 +41,7 @@ export class AppController {
   }
 
   @Get('admin/audit-logs')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(SuperAdminGuard)
   async getAuditLogs() {
     const { data, error } = await this.supabaseService
       .getAdminClient()
