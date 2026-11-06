@@ -294,30 +294,39 @@ export class CoursesService {
     return data;
   }
 
-  // 👈 NEW: Admin Approval Method
   async approveCourse(courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
+    
+    this.logger.log(`Attempting to approve course: ${courseId}`);
 
+    // Force the update
     const { data, error } = await supabase
       .from("courses")
       .update({ 
         is_published: true, 
         status: 'PUBLISHED',
-        published_at: new Date()
+        published_at: new Date().toISOString()
       })
       .eq("id", courseId)
-      .select()
-      .single();
+      .select(); // Note: Removed .single() so we can check array length
 
     if (error) {
       this.logger.error(`Failed to approve course: ${error.message}`);
       throw new BadRequestException(`Failed to approve course: ${error.message}`);
     }
 
-    return { message: "Course approved successfully", course: data };
+    if (!data || data.length === 0) {
+      this.logger.error(`Course not found or update blocked by RLS for ID: ${courseId}`);
+      throw new BadRequestException("Course not found or database refused update.");
+    }
+
+    this.logger.log(`Successfully approved course: ${data[0].title} (${data[0].id})`);
+    
+    return { message: "Course approved successfully", course: data[0] };
   }
 
-  // 👈 NEW: Admin Rejection Method
+
+
   async rejectCourse(courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
