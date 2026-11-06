@@ -3,8 +3,7 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import type { Page, Course, User, ChatMessage, CourseWithEnrollment, AuditLog, PayoutRequest, InstructorMessage, Lesson, Webinar } from '../types';
-import { Api, authStorage, api } from '../lib/api';
-import { ApiAdmin } from '../lib/ApiAdmin';
+import { Api, authStorage, api, ApiAdmin } from '../lib/api';
 
 interface AppContextType {
   isLoggedIn: boolean;
@@ -60,6 +59,7 @@ interface AppContextType {
   handlePayoutRequest: (payoutData: Omit<PayoutRequest, 'id' | 'instructorId' | 'status' | 'timestamp'>) => void;
   handleCourseUpdate: (courseId: number | string, updatedDetails: Partial<Course>) => Promise<void>;
   handleCourseDelete: (courseId: number | string) => Promise<void>;
+  handleCourseApprove: (courseId: number | string) => Promise<void>;
   handleModuleAdd: (courseId: number | string, moduleTitle: string) => Promise<{ id: string | number; title: string } | null>;
   handleLessonAdd: (
     courseId: number | string,
@@ -203,31 +203,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   };
  
-useEffect(() => {
-  if (typeof window === 'undefined') return;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+  
+    let cancelled = false;
+  
+    (async () => {
+      try {
+        const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+        const url = isAdmin ? `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses?includeDrafts=true` : `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses`;
+        
+        // 👈 Using raw fetch with cache: 'no-store' to FORCE fresh data
+        const res = await fetch(url, { cache: 'no-store' });
+        const coursesData = await res.json();
+  
+        const courseList = Array.isArray(coursesData)
+          ? coursesData
+          : coursesData?.data ?? coursesData?.courses ?? [];
+        const normalizedCourses = courseList.map(normalizeCourse);
+        if (!cancelled) setCourses(normalizedCourses);
+      } catch (err) {
+        console.error('Failed to load courses:', err);
+        if (!cancelled) setCourses([]);
+      }
+    })();
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.role]);
 
-  let cancelled = false;
 
-  (async () => {
-    try {
-      const coursesData: any = await Api.courses.list();
-      const courseList = Array.isArray(coursesData)
-        ? coursesData
-        : coursesData?.data ?? coursesData?.courses ?? [];
-      const normalizedCourses = courseList.map(normalizeCourse);
-      if (!cancelled) setCourses(normalizedCourses);
-    } catch (err) {
-      console.error('Failed to load courses:', err);
-      if (!cancelled) setCourses([]);
-    }
-  })();
 
-  return () => {
-    cancelled = true;
-  };
-}, []);
-
-// ---- Effect 2: when signed in, overlay progress + enrollment ----
 useEffect(() => {
   if (typeof window === 'undefined') return;
   if (!isLoggedIn || !currentUser?.id) return;
@@ -295,7 +302,7 @@ useEffect(() => {
 }, [courses]);
 
 
-// ---- Effect 3: Fetch real users if logged in as Admin or Superadmin ----
+
 useEffect(() => {
   if (typeof window === 'undefined') return;
   if (!isLoggedIn || !currentUser?.id) return;
@@ -344,15 +351,20 @@ useEffect(() => {
     setAuditLogs((prev) => [newLog, ...prev]);
   };
 
-  const refreshCourses = async () => {
+
+   const refreshCourses = async () => {
     try {
-      const allCourses: any = await Api.courses.list();
+      const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
+      const url = isAdmin ? `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses?includeDrafts=true` : `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses`;
+      
+      const res = await fetch(url, { cache: 'no-store' });
+      const allCourses = await res.json();
+
       const list = Array.isArray(allCourses)
         ? allCourses
         : allCourses?.data ?? allCourses?.courses ?? [];
       const normalized = list.map(normalizeCourse);
 
-      // Fetch projects and attach them to their courses
       const token = authStorage.getToken();
       if (token) {
         try {
@@ -383,6 +395,7 @@ useEffect(() => {
       return [];
     }
   };
+
 
   const handleLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -817,8 +830,8 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
           category: courseData.category,
           price: courseData.price ?? 0,
           image_url: courseData.imageUrl,
-          status: 'PUBLISHED',
-          is_published: true,
+          status: 'DRAFT',        
+          is_published: false,   
         },
         token,
       );
@@ -859,6 +872,19 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
       prev.map((c) => (String(c.id) === String(courseId) ? { ...c, ...updatedDetails } : c)),
     );
     logAuditEvent('Course Updated', `Updated course ${courseId}`, 'course');
+  };
+
+  const handleCourseApprove = async (courseId: number | string): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+    
+    const idStr = String(courseId);
+
+    // 1. Tell the backend to approve it. 
+    // The await ensures the DB is fully updated before this function resolves.
+    await api.put(`/courses/${idStr}/approve`, {}, token);
+    
+    logAuditEvent('Course Approved', `Approved course ${courseId}`, 'course');
   };
 
   const handleCourseDelete = async (courseId: number | string): Promise<void> => {
@@ -1133,7 +1159,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle,
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
-    handleCourseUpdate, handleCourseDelete, handleModuleAdd, handleLessonAdd, handleLessonDelete,
+    handleCourseUpdate, handleCourseDelete, handleCourseApprove, handleModuleAdd, handleLessonAdd, handleLessonDelete,
     handleWebinarAdd, handleWebinarDelete, handleWebinarRegister,
     handleProjectAdd, handleProjectDelete,
     handleProjectSubmitWithFiles, handleAIGrade, handleApproveGrade,

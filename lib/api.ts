@@ -30,29 +30,31 @@ interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
  token?: string;
 }
 
+
 export async function apiFetch<T = unknown>(
- path: string,
- options: ApiFetchOptions = {},
+  path: string,
+  options: ApiFetchOptions = {},
 ): Promise<T> {
- const { body, token, headers, ...rest } = options;
+  const { body, token, headers, ...rest } = options;
 
- const finalHeaders: Record<string, string> = {
-   Accept: 'application/json',
-   ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-   ...((headers as Record<string, string>) ?? {}),
- };
+  const finalHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...((headers as Record<string, string>) ?? {}),
+  };
 
- if (token) {
-   finalHeaders['Authorization'] = `Bearer ${token}`;
- }
+  if (token) {
+    finalHeaders['Authorization'] = `Bearer ${token}`;
+  }
 
- const url = path.startsWith('http') ? path : `${API_URL}${path}`;
+  const url = path.startsWith('http') ? path : `${API_URL}${path}`;
 
- const res = await fetch(url, {
-   ...rest,
-   headers: finalHeaders,
-   body: body !== undefined ? JSON.stringify(body) : undefined,
- });
+  const res = await fetch(url, {
+    ...rest,
+    headers: finalHeaders,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: 'no-store', 
+  });
 
  const text = await res.text();
  let parsed: unknown = null;

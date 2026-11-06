@@ -1,4 +1,5 @@
 import React from 'react';
+
 export type Page = 'Dashboard' | 'My Courses' | 'Catalog' | 'Certificates' | 'Community' | 'Settings' | 'About Us' | 'Admin' | 'Admin Portal' | 'Switch to Admin' | 'Instructor Dashboard' | 'Instructor Submissions' | 'Instructor Courses' | 'Instructor Revenue' | 'Instructor Students' | 'Profile' | 'Audit Log' | 'Role Management';
 
 export interface User {
@@ -7,7 +8,7 @@ export interface User {
   email: string;
   avatarUrl: string;
   role: 'student' | 'admin' | 'instructor' | 'superadmin';
-  enrolledCourseIds: number[];
+  enrolledCourseIds: string[]; // 👈 Changed to string[] because Supabase IDs are UUIDs
 }
 
 export interface ChatMessage {
@@ -62,18 +63,24 @@ export interface Webinar {
 }
 
 export interface Course {
-  id: number | string;              // ⬅️ CHANGED
+  id: number | string;              
   title: string;
   category: string;
   instructor: string;
-  instructor_id?: string;           // ⬅️ ADDED
+  instructor_id?: string;           
   duration: string;
   description: string;
   imageUrl: string;
   price: number;
   rating: number;
-  enrollmentCount: number;
-  modules: number;
+  
+  // 👈 Added these fields to match your backend
+  enrollmentCount: number;          
+  enrollment_count?: number;        // Backend sometimes sends this as raw DB field
+  average_rating?: number;          // Backend raw DB field
+  is_published?: boolean;           
+  status?: string;                  
+  modules: number | any[];          // Backend sometimes sends count, sometimes array
   content: Module[];
   projects: Project[];
   progress: number;
