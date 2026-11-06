@@ -39,8 +39,15 @@ export class CoursesController {
     @Query("category") category?: string,
     @Query("level") level?: string,
     @Query("search") search?: string,
+    @Query("includeDrafts") includeDrafts?: string, // 👈 Added this
   ) {
-    return this.coursesService.getAllCourses({ category, level, search });
+    // If includeDrafts is 'true', parse it to a boolean
+    return this.coursesService.getAllCourses({ 
+      category, 
+      level, 
+      search, 
+      includeDrafts: includeDrafts === 'true' 
+    });
   }
 
   @Get(":id")
@@ -51,6 +58,22 @@ export class CoursesController {
   @Get(":id/reviews")
   async getCourseReviews(@Param("id") id: string) {
     return this.coursesService.getCourseReviews(id);
+  }
+
+  // ==================== ADMIN APPROVAL ROUTES ====================
+
+  // 👈 NEW: Approve a course (Admin only)
+  @Put(":id/approve")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  async approveCourse(@Param("id") id: string) {
+    return this.coursesService.approveCourse(id);
+  }
+
+  // 👈 NEW: Reject/Unpublish a course (Admin only)
+  @Put(":id/reject")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  async rejectCourse(@Param("id") id: string) {
+    return this.coursesService.rejectCourse(id);
   }
 
   // ==================== INSTRUCTOR ROUTES ====================
