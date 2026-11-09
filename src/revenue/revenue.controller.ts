@@ -8,25 +8,33 @@ import {
   Param,
   Query,
   BadRequestException,
+  UseGuards,
+  ForbiddenException,
 } from "@nestjs/common";
 import { RevenueService } from "./revenue.service";
 import {
   PayoutSettingsDto,
   RequestPayoutDto,
   ProcessPayoutDto,
-  UpdatePayoutStatusDto,
   EarningsFilterDto,
 } from "./dto/revenue.dto";
+import { SupabaseAuthGuard } from "../auth/supabase-auth.guard";
+import { AdminGuard } from "../auth/admin.guard";
+import { CurrentUser } from "../auth/current-user.decorator";
+
+type AuthUser = { id: string; email?: string; role?: string };
 
 @Controller("api/revenue")
 export class RevenueController {
   constructor(private readonly revenueService: RevenueService) {}
 
-  // ==================== EARNINGS ====================
+  // ==================== EARNINGS (INSTRUCTOR) ====================
 
   @Get("instructor/:instructorId/earnings")
+  @UseGuards(SupabaseAuthGuard)
   async getInstructorEarnings(
     @Param("instructorId") instructorId: string,
+    @CurrentUser() user: AuthUser,
     @Query("start_date") start_date?: string,
     @Query("end_date") end_date?: string,
     @Query("course_id") course_id?: string,
@@ -34,6 +42,11 @@ export class RevenueController {
     @Query("page") page?: number,
     @Query("limit") limit?: number,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("You can only view your own earnings");
+    }
     return this.revenueService.getInstructorEarnings(instructorId, {
       start_date: start_date ? new Date(start_date) : undefined,
       end_date: end_date ? new Date(end_date) : undefined,
@@ -45,15 +58,31 @@ export class RevenueController {
   }
 
   @Get("instructor/:instructorId/summary")
-  async getEarningsSummary(@Param("instructorId") instructorId: string) {
+  @UseGuards(SupabaseAuthGuard)
+  async getEarningsSummary(
+    @Param("instructorId") instructorId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("You can only view your own earnings");
+    }
     return this.revenueService.getEarningsSummary(instructorId);
   }
 
   @Get("instructor/:instructorId/analytics")
+  @UseGuards(SupabaseAuthGuard)
   async getRevenueAnalytics(
     @Param("instructorId") instructorId: string,
+    @CurrentUser() user: AuthUser,
     @Query("days") days?: number,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("You can only view your own analytics");
+    }
     return this.revenueService.getRevenueAnalytics(
       instructorId,
       days ? +days : 30,
@@ -63,31 +92,61 @@ export class RevenueController {
   // ==================== PAYOUT SETTINGS ====================
 
   @Get("instructor/:instructorId/payout-settings")
-  async getPayoutSettings(@Param("instructorId") instructorId: string) {
+  @UseGuards(SupabaseAuthGuard)
+  async getPayoutSettings(
+    @Param("instructorId") instructorId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("Not authorized");
+    }
     return this.revenueService.getPayoutSettings(instructorId);
   }
 
   @Put("instructor/:instructorId/payout-settings")
+  @UseGuards(SupabaseAuthGuard)
   async updatePayoutSettings(
     @Param("instructorId") instructorId: string,
     @Body() settingsDto: PayoutSettingsDto,
+    @CurrentUser() user: AuthUser,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("Not authorized");
+    }
     return this.revenueService.updatePayoutSettings(instructorId, settingsDto);
   }
 
-  // ==================== PAYOUTS ====================
+  // ==================== PAYOUTS (INSTRUCTOR) ====================
 
   @Post("payouts/request")
-  async requestPayout(@Body() requestDto: RequestPayoutDto) {
+  @UseGuards(SupabaseAuthGuard)
+  async requestPayout(
+    @Body() requestDto: RequestPayoutDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.id !== requestDto.instructor_id) {
+      throw new ForbiddenException("You can only request your own payout");
+    }
     return this.revenueService.requestPayout(requestDto);
   }
 
   @Get("instructor/:instructorId/payouts")
+  @UseGuards(SupabaseAuthGuard)
   async getPayouts(
     @Param("instructorId") instructorId: string,
+    @CurrentUser() user: AuthUser,
     @Query("page") page?: number,
     @Query("limit") limit?: number,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("Not authorized");
+    }
     return this.revenueService.getPayouts(
       instructorId,
       page ? +page : 1,
@@ -96,16 +155,24 @@ export class RevenueController {
   }
 
   @Get("instructor/:instructorId/payouts/:payoutId")
+  @UseGuards(SupabaseAuthGuard)
   async getPayoutById(
     @Param("instructorId") instructorId: string,
     @Param("payoutId") payoutId: string,
+    @CurrentUser() user: AuthUser,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+    if (user.id !== instructorId && !isAdmin) {
+      throw new ForbiddenException("Not authorized");
+    }
     return this.revenueService.getPayoutById(payoutId, instructorId);
   }
 
   // ==================== ADMIN ENDPOINTS ====================
 
   @Get("admin/payouts")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async getAllPayouts(
     @Query("status") status?: string,
     @Query("page") page?: number,
@@ -119,11 +186,13 @@ export class RevenueController {
   }
 
   @Post("admin/payouts/process")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async processPayout(@Body() processDto: ProcessPayoutDto) {
     return this.revenueService.processPayout(processDto);
   }
 
   @Post("admin/payouts/:payoutId/complete")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async completePayout(
     @Param("payoutId") payoutId: string,
     @Body("reference") reference: string,
@@ -135,6 +204,7 @@ export class RevenueController {
   }
 
   @Post("admin/payouts/:payoutId/fail")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async failPayout(
     @Param("payoutId") payoutId: string,
     @Body("reason") reason: string,
@@ -146,7 +216,17 @@ export class RevenueController {
   }
 
   @Get("admin/platform-stats")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
   async getPlatformRevenueStats() {
     return this.revenueService.getPlatformRevenueStats();
+  }
+
+  @Post("admin/initiate")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  async adminInitiatePayout(
+    @Body() dto: any,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.revenueService.adminInitiatePayout(user.id, dto);
   }
 }

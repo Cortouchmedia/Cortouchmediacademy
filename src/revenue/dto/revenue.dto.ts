@@ -1,4 +1,3 @@
-// src/revenue/dto/revenue.dto.ts
 export class PayoutSettingsDto {
   bank_name: string;
   account_number: string;

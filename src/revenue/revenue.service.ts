@@ -639,4 +639,31 @@ export class RevenueService {
       active_instructors: uniqueInstructors.size,
     };
   }
+
+  async adminInitiatePayout(adminId: string, dto: {
+    instructor_id: string;
+    amount: number;
+    payment_method?: string;
+    reference?: string;
+    notes?: string;
+  }) {
+    // Reuse requestPayout but skip the "request" semantics
+    const result = await this.requestPayout({
+      instructor_id: dto.instructor_id,
+      amount: dto.amount,
+      payment_method: dto.payment_method,
+      notes: dto.notes || `Initiated by admin ${adminId}`,
+    });
+  
+
+    if (result.payout?.id) {
+      await this.processPayout({
+        payout_id: result.payout.id,
+        admin_id: adminId,
+        reference: dto.reference,
+      });
+    }
+  
+    return result;
+  }
 }
