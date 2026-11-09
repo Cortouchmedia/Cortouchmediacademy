@@ -8,7 +8,6 @@ import {
   Body,
   Param,
   Query,
-  Req,
   Patch,
   UseGuards,
   ForbiddenException,
@@ -32,6 +31,12 @@ type AuthUser = { id: string; email?: string; role?: string };
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
+  // 🔥 Helper — case-insensitive admin check
+  private isAdmin(user: AuthUser): boolean {
+    const role = (user.role ?? "").toUpperCase();
+    return role === "ADMIN" || role === "SUPERADMIN";
+  }
+
   // ==================== PUBLIC ROUTES ====================
 
   @Get()
@@ -39,14 +44,13 @@ export class CoursesController {
     @Query("category") category?: string,
     @Query("level") level?: string,
     @Query("search") search?: string,
-    @Query("includeDrafts") includeDrafts?: string, // 👈 Added this
+    @Query("includeDrafts") includeDrafts?: string,
   ) {
-    // If includeDrafts is 'true', parse it to a boolean
-    return this.coursesService.getAllCourses({ 
-      category, 
-      level, 
-      search, 
-      includeDrafts: includeDrafts === 'true' 
+    return this.coursesService.getAllCourses({
+      category,
+      level,
+      search,
+      includeDrafts: includeDrafts === "true",
     });
   }
 
@@ -62,21 +66,19 @@ export class CoursesController {
 
   // ==================== ADMIN APPROVAL ROUTES ====================
 
-  // 👈 NEW: Approve a course (Admin only)
   @Put(":id/approve")
   @UseGuards(SupabaseAuthGuard, AdminGuard)
   async approveCourse(@Param("id") id: string) {
     return this.coursesService.approveCourse(id);
   }
 
-  // 👈 NEW: Reject/Unpublish a course (Admin only)
   @Put(":id/reject")
   @UseGuards(SupabaseAuthGuard, AdminGuard)
   async rejectCourse(@Param("id") id: string) {
     return this.coursesService.rejectCourse(id);
   }
 
-  // ==================== INSTRUCTOR ROUTES ====================
+  // ==================== INSTRUCTOR / ADMIN COURSE ROUTES ====================
 
   @Post()
   @UseGuards(SupabaseAuthGuard, InstructorGuard)
@@ -87,14 +89,30 @@ export class CoursesController {
     return this.coursesService.createCourse(user.id, createCourseDto);
   }
 
+  // 🔥 UPDATED: allows instructors (own courses) AND admins (any course)
   @Put(":id")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async updateCourse(
     @Param("id") id: string,
     @Body() updateCourseDto: UpdateCourseDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.updateCourse(id, user.id, updateCourseDto);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    const isInstructor = role === "INSTRUCTOR";
+
+    if (!isAdmin && !isInstructor) {
+      throw new ForbiddenException(
+        "Only instructors or admins can update courses",
+      );
+    }
+
+    return this.coursesService.updateCourse(
+      id,
+      user.id,
+      updateCourseDto,
+      isAdmin,
+    );
   }
 
   @Delete(":id")
@@ -112,8 +130,7 @@ export class CoursesController {
     @Param("instructorId") instructorId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    // Caller must be the instructor themselves, or an admin
-    if (user.id !== instructorId && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+    if (user.id !== instructorId && !this.isAdmin(user)) {
       throw new ForbiddenException("You can only view your own courses");
     }
     return this.coursesService.getInstructorCourses(instructorId);
@@ -125,7 +142,7 @@ export class CoursesController {
     @Param("instructorId") instructorId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    if (user.id !== instructorId && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+    if (user.id !== instructorId && !this.isAdmin(user)) {
       throw new ForbiddenException("You can only view your own students");
     }
     return this.coursesService.getInstructorStudents(instructorId);
@@ -208,11 +225,7 @@ export class CoursesController {
     @Param("userId") userId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    const role = (user.role ?? "").toUpperCase();
-    const isSelf = user.id === userId;
-    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
-  
-    if (!isSelf && !isAdmin) {
+    if (user.id !== userId && !this.isAdmin(user)) {
       throw new ForbiddenException("You can only view your own enrollments");
     }
     return this.coursesService.getUserEnrollments(userId);
@@ -225,7 +238,7 @@ export class CoursesController {
     @Param("courseId") courseId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    if (user.id !== userId && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+    if (user.id !== userId && !this.isAdmin(user)) {
       throw new ForbiddenException("You can only view your own progress");
     }
     return this.coursesService.getCourseProgress(userId, courseId);
@@ -238,11 +251,7 @@ export class CoursesController {
     @Query("limit") limit: string | undefined,
     @CurrentUser() user: AuthUser,
   ) {
-    if (
-      user.id !== instructorId &&
-      user.role !== "ADMIN" &&
-      user.role !== "SUPERADMIN"
-    ) {
+    if (user.id !== instructorId && !this.isAdmin(user)) {
       throw new ForbiddenException("You can only view your own enrollments");
     }
     return this.coursesService.getRecentEnrollments(
@@ -260,7 +269,6 @@ export class CoursesController {
     return this.coursesService.updateLessonProgress(user.id, progressDto);
   }
 
-  // Reviews
   @Post("reviews")
   @UseGuards(SupabaseAuthGuard)
   async addReview(

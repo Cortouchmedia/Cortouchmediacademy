@@ -255,24 +255,25 @@ export class CoursesService {
     courseId: string,
     instructorId: string,
     updateCourseDto: any,
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
-
-    // Note: If an admin is editing, they might not be the instructor.
-    // You may want to bypass this check if the user is an admin.
-    const { data: existingCourse, error: findError } = await supabase
-      .from("courses")
-      .select("id")
-      .eq("id", courseId)
-      .eq("instructor_id", instructorId)
-      .single();
-
+  
+    // Admins can edit any course — they only need the course to exist.
+    // Instructors can only edit their own courses.
+    let query = supabase.from("courses").select("id").eq("id", courseId);
+    if (!isAdmin) {
+      query = query.eq("instructor_id", instructorId);
+    }
+  
+    const { data: existingCourse, error: findError } = await query.single();
+  
     if (findError || !existingCourse) {
       throw new NotFoundException(
         "Course not found or you do not have permission",
       );
     }
-
+  
     const { data, error } = await supabase
       .from("courses")
       .update({
@@ -283,14 +284,14 @@ export class CoursesService {
       .eq("id", courseId)
       .select()
       .single();
-
+  
     if (error) {
       this.logger.error(`Failed to update course: ${error.message}`);
       throw new BadRequestException(
         `Failed to update course: ${error.message}`,
       );
     }
-
+  
     return data;
   }
 
