@@ -208,7 +208,11 @@ export class CoursesController {
     @Param("userId") userId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    if (user.id !== userId && user.role !== "ADMIN" && user.role !== "SUPERADMIN") {
+    const role = (user.role ?? "").toUpperCase();
+    const isSelf = user.id === userId;
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+  
+    if (!isSelf && !isAdmin) {
       throw new ForbiddenException("You can only view your own enrollments");
     }
     return this.coursesService.getUserEnrollments(userId);
