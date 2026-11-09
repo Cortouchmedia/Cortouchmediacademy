@@ -184,18 +184,46 @@ export class UsersService {
   async adminFindAll() {
     try {
       const supabaseAdmin = this.supabaseService.getAdminClient();
-      const { data, error } = await supabaseAdmin.from("profiles").select("*");
-
+  
+      // 1. Fetch all profiles (unchanged)
+      const { data: profiles, error } = await supabaseAdmin
+        .from("profiles")
+        .select("*");
+  
       if (error) {
         this.logger.error(`Admin fetch failed: ${error.message}`);
         throw new InternalServerErrorException(
           `Admin fetch failed: ${error.message}`,
         );
       }
-
-      return data || [];
+  
+      if (!profiles || profiles.length === 0) return [];
+  
+      // 2. Fetch all enrollments in a single query
+      const { data: enrollments, error: enrollError } = await supabaseAdmin
+        .from("course_enrollments")
+        .select("user_id");
+  
+      if (enrollError) {
+        this.logger.warn(
+          `Failed to fetch enrollment counts: ${enrollError.message}`,
+        );
+      }
+  
+      // 3. Build a count map: { userId → number }
+      const countByUser = new Map<string, number>();
+      (enrollments || []).forEach((e: any) => {
+        if (e.user_id) {
+          countByUser.set(e.user_id, (countByUser.get(e.user_id) ?? 0) + 1);
+        }
+      });
+  
+      // 4. Merge the count into each profile
+      return profiles.map((p: any) => ({
+        ...p,
+        enrollment_count: countByUser.get(p.id) ?? 0,
+      }));
     } catch (error) {
-      // Fixed: Type guard for error
       if (error instanceof Error) {
         this.logger.error(`Error in adminFindAll: ${error.message}`);
       } else {
