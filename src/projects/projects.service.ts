@@ -479,15 +479,24 @@ export class ProjectsService {
   
       const raw = submissions || [];
   
-      // 4. Fetch the student profiles for all these submissions
-      const userIds = [...new Set(raw.map((s) => s.student_id))];
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .in("id", userIds);
-  
-      const profileById = new Map((profiles || []).map((p) => [p.id, p]));
-  
+      const userIds = [
+        ...new Set(
+          raw
+            .map((s) => s.student_id)
+            .filter((id): id is string => !!id && id !== "undefined")
+        ),
+      ];
+
+      
+      let profileById = new Map();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, avatar_url")
+          .in("id", userIds);
+        
+        profileById = new Map((profiles || []).map((p) => [p.id, p]));
+      }
       // 5. Compose the enriched rows
       const enriched = raw.map((s) => {
         const project = projectById.get(s.project_id);
