@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
-import { MailService } from "../mail/mail.service"; // 👈 Import
+import { MailService } from "../mail/mail.service";
 
 @Injectable()
 export class AuthService {
@@ -13,7 +13,7 @@ export class AuthService {
 
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly mailService: MailService, // 👈 Inject
+    private readonly mailService: MailService,
   ) {}
 
   // 👈 Helper function to save audit logs to Supabase
@@ -123,11 +123,9 @@ export class AuthService {
 
       this.logger.log(`Signup successful for email: ${email} as ${role}`);
 
-      // Auto-create profile in profiles table using admin client to bypass RLS
       if (authData.user) {
         await this.createUserProfile(authData.user.id, email, full_name, role);
         
-        // 👈 Save the Audit Log for Signup
         await this.saveAuditLog(
           authData.user.id,
           "User Registration",
@@ -192,7 +190,6 @@ export class AuthService {
 
       this.logger.log(`Signin successful for email: ${email}`);
 
-      // 👈 Save the Audit Log for Login
       if (data.user) {
         await this.saveAuditLog(
           data.user.id,
@@ -200,6 +197,14 @@ export class AuthService {
           "auth",
           `${email} successfully logged in.`,
         );
+
+        // 👈 Send the login notification email
+        const displayName =
+          data.user.user_metadata?.full_name || data.user.email || "there";
+
+        if (data.user.email) {
+          await this.mailService.sendLoginEmail(data.user.email, displayName);
+        }
       }
 
       return {
