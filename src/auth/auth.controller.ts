@@ -120,9 +120,9 @@ export class AuthController {
     };
   }
 
-  @Put('users/:id/role')
+  @Put('users/:id')
   async updateUser(
-    @Query('id') userId: string,
+    @Param('id') userId: string,
     @Body() updateData: UpdateUserDto,
     @Req() req: any,
   ) {
@@ -268,6 +268,51 @@ export class AuthController {
     return {
       message: `User role updated to ${upperRole}`,
       user: updatedProfile,
+    };
+  }
+
+  // ==================== PASSWORD RESET (ADMIN) ====================
+
+  @Post('users/:id/reset-password')
+  @UseGuards(SupabaseAuthGuard)
+  async resetUserPassword(
+    @Param('id') targetUserId: string,
+    @Req() req: any,
+  ) {
+    this.logger.log(
+      `Admin ${req.user.id} requested password reset for user ${targetUserId}`,
+    );
+
+    const requesterRole = (req.user.role ?? '').toUpperCase();
+    if (requesterRole !== 'ADMIN' && requesterRole !== 'SUPERADMIN') {
+      this.logger.error(`User ${req.user.id} with role ${requesterRole} tried to reset password`);
+      throw new UnauthorizedException('Only admins can reset user passwords');
+    }
+
+    const supabase = this.supabaseService.getAdminClient();
+
+
+    const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(targetUserId);
+
+    if (userError || !user || !user.email) {
+      this.logger.error(`User ${targetUserId} not found or has no email`);
+      throw new BadRequestException('User not found or has no email address');
+    }
+
+   
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/update-password`,
+    });
+
+    if (resetError) {
+      this.logger.error(`Password reset email failed: ${resetError.message}`);
+      throw new BadRequestException(`Failed to send reset email: ${resetError.message}`);
+    }
+
+    this.logger.log(`Password reset email sent to ${user.email}`);
+
+    return {
+      message: `Password reset link sent to ${user.email}`,
     };
   }
 }
