@@ -290,26 +290,34 @@ export class RevenueService {
   async requestPayout(requestDto: RequestPayoutDto) {
     const supabase = this.getSupabaseClient();
 
+    // 👈 LOG 1: See exactly what arrived from the frontend
+    console.log("=== [1] RECEIVED DTO ===", requestDto);
 
     const amount = Number(requestDto.amount);
     if (!amount || isNaN(amount) || amount <= 0) {
       throw new BadRequestException("Invalid payout amount provided.");
     }
 
-   
     const summary = await this.getEarningsSummary(requestDto.instructor_id);
+    
+    // 👈 LOG 2: See the backend calculated balance
+    console.log("=== [2] SUMMARY ===", summary);
+
     if (summary.available_balance < amount) {
       throw new BadRequestException("Insufficient available balance");
     }
 
-   
     const settings = await this.getPayoutSettings(requestDto.instructor_id);
-    const minAmount = settings?.minimum_payout_amount || 10000;
+    
+    // 👈 Fallback changed to 5000
+    const minAmount = settings?.minimum_payout_amount || 5000;
+
+    // 👈 LOG 3: See the minimum amount requirement
+    console.log("=== [3] MIN AMOUNT ===", minAmount);
 
     if (amount < minAmount) {
       throw new BadRequestException(`Minimum payout amount is ${minAmount}`);
     }
-
 
     const reference = `PO-${Date.now()}-${randomBytes(6).toString("hex")}`;
 
