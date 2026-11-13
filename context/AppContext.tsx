@@ -247,62 +247,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [currentUser?.role]);
 
 
-
-useEffect(() => {
-  if (typeof window === 'undefined') return;
-  if (!isLoggedIn || !currentUser?.id) return;
-  const token = authStorage.getToken();
-  if (!token) return;
-
-  let cancelled = false;
-
-  (async () => {
-    try {
-      const enrollmentsData: any = await Api.courses.userEnrollments(
-        currentUser.id,
-        token,
-      );
-      const enrollList = Array.isArray(enrollmentsData)
-        ? enrollmentsData
-        : enrollmentsData?.data ?? [];
-
-      const enrolledIds = enrollList.map((e: any) => String(e.course_id));
-      const meta: Record<string, { progress: number; completed: boolean }> = {};
-      enrollList.forEach((e: any) => {
-        const cid = String(e.course_id);
-        const pct = Math.round(Number(e.progress_percentage ?? 0));
-        meta[cid] = {
-          progress: pct,
-          completed: pct >= 100 || !!e.completed_at,
-        };
-      });
-
-      if (cancelled) return;
-
-      setCourses((prev) =>
-        prev.map((c) => {
-          const m = meta[String(c.id)];
-          return m ? { ...c, progress: m.progress, completed: m.completed } : c;
-        }),
-      );
-
-      setCurrentUser((prev) =>
-        prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
-      );
-    } catch (err) {
-      console.warn('Could not load enrollments (normal for admins):', err);
-    
-      setCurrentUser((prev) =>
-        prev ? { ...prev, enrolledCourseIds: [] } : prev,
-      );
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-  };
-}, [isLoggedIn, currentUser?.id]);
-
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isLoggedIn || !currentUser?.id) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+  
+    let cancelled = false;
+  
+    (async () => {
+      try {
+        // 1. Fetch enrollments
+        const enrollmentsData: any = await Api.courses.userEnrollments(
+          currentUser.id,
+          token,
+        );
+        const enrollList = Array.isArray(enrollmentsData)
+          ? enrollmentsData
+          : enrollmentsData?.data ?? [];
+  
+        // 👈 2. Fetch certificates (only for students)
+        let certList: any[] = [];
+        if (currentUser.role === 'student') {
+          try {
+            const certsData: any = await Api.certificates.mine(currentUser.id, token);
+            certList = Array.isArray(certsData) ? certsData : certsData?.data ?? [];
+          } catch (e) {
+            console.warn('Certificate fetch failed:', e);
+          }
+        }
+  
+        const certByCourse = new Map<string, any>();
+        certList.forEach((c: any) => {
+          certByCourse.set(String(c.course_id), c);
+        });
+  
+        const enrolledIds = enrollList.map((e: any) => String(e.course_id));
+        
+        // 👈 3. Build meta with 3 states
+        const meta: Record<string, { 
+          progress: number; 
+          completed: boolean; 
+          certificate: any | null;
+          enrollmentId: string;
+        }> = {};
+        
+        enrollList.forEach((e: any) => {
+          const cid = String(e.course_id);
+          const pct = Math.round(Number(e.progress_percentage ?? 0));
+          const cert = certByCourse.get(cid) || null;
+          meta[cid] = {
+            progress: pct,
+            completed: !!cert, 
+            certificate: cert,
+            enrollmentId: e.id,
+          };
+        });
+  
+        if (cancelled) return;
+  
+        setCourses((prev) =>
+          prev.map((c) => {
+            const m = meta[String(c.id)];
+            if (!m) return c;
+            return { 
+              ...c, 
+              progress: m.progress, 
+              completed: m.completed,
+              certificate: m.certificate, 
+              enrollmentId: m.enrollmentId,
+            } as any;
+          }),
+        );
+  
+        setCurrentUser((prev) =>
+          prev ? { ...prev, enrolledCourseIds: enrolledIds as any } : prev,
+        );
+      } catch (err) {
+        console.warn('Could not load enrollments:', err);
+        setCurrentUser((prev) =>
+          prev ? { ...prev, enrolledCourseIds: [] } : prev,
+        );
+      }
+    })();
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, currentUser?.id, currentUser?.role]);
 useEffect(() => {
   if (!selectedCourse) return;
   const updated = courses.find(
@@ -663,7 +695,7 @@ useEffect(() => {
         token,
       );
   
-      // Re-sync enrollments from the server so client state matches DB
+      // Re-sync enrollments AND certificates from the server
       const enrollmentsData: any = await Api.courses.userEnrollments(
         currentUser.id,
         token,
@@ -671,21 +703,48 @@ useEffect(() => {
       const enrollList = Array.isArray(enrollmentsData)
         ? enrollmentsData
         : enrollmentsData?.data ?? [];
+
+      // 👈 Fetch certificates too
+      let certList: any[] = [];
+      if (currentUser.role === 'student') {
+        try {
+          const certsData: any = await Api.certificates.mine(currentUser.id, token);
+          certList = Array.isArray(certsData) ? certsData : certsData?.data ?? [];
+        } catch (e) {}
+      }
+
+      const certByCourse = new Map<string, any>();
+      certList.forEach((c: any) => certByCourse.set(String(c.course_id), c));
   
-      const meta: Record<string, { progress: number; completed: boolean }> = {};
+      const meta: Record<string, { 
+        progress: number; 
+        completed: boolean; 
+        certificate: any | null;
+        enrollmentId: string;
+      }> = {};
+      
       enrollList.forEach((e: any) => {
         const cid = String(e.course_id);
         const pct = Math.round(Number(e.progress_percentage ?? 0));
-        const isDone =
-          pct >= 100 ||
-          (typeof e.completed_at === 'string' && e.completed_at.length > 0);
-        meta[cid] = { progress: pct, completed: isDone };
+        const cert = certByCourse.get(cid) || null;
+        meta[cid] = { 
+          progress: pct, 
+          completed: !!cert,
+          certificate: cert,
+          enrollmentId: e.id,
+        };
       });
   
       setCourses((prev) =>
         prev.map((c) => {
           const m = meta[String(c.id)];
-          return m ? { ...c, progress: m.progress, completed: m.completed } : c;
+          return m ? { 
+            ...c, 
+            progress: m.progress, 
+            completed: m.completed,
+            certificate: m.certificate,
+            enrollmentId: m.enrollmentId,
+          } as any : c;
         }),
       );
     } catch (err) {

@@ -74,14 +74,12 @@ export interface Course {
   imageUrl: string;
   price: number;
   rating: number;
-  
-  // 👈 Added these fields to match your backend
   enrollmentCount: number;          
-  enrollment_count?: number;        // Backend sometimes sends this as raw DB field
-  average_rating?: number;          // Backend raw DB field
+  enrollment_count?: number;        
+  average_rating?: number;          
   is_published?: boolean;           
   status?: string;                  
-  modules: number | any[];          // Backend sometimes sends count, sometimes array
+  modules: number | any[];        
   content: Module[];
   projects: Project[];
   progress: number;
@@ -95,6 +93,9 @@ export interface Course {
   requirements?: string[];
   instructorBio?: string;
   features?: string[];
+  certificate?: any | null;         
+  enrollmentId?: string;           
+  completed_at?: string | null;     
 }
 
 export interface CourseWithEnrollment extends Course {

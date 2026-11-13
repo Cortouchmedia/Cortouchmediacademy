@@ -87,7 +87,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ user, courses }) => 
                 return (
                   <div
                     key={course.id}
-                    className="bg-white p-6 rounded-xl flex items-center justify-between shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+                    className="bg-white p-6 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
                   >
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider text-brand-muted">
@@ -103,13 +103,29 @@ export const Certificates: React.FC<CertificatesProps> = ({ user, courses }) => 
                         )}
                       </p>
                     </div>
-                    <button
-                      onClick={() => setCertificateCourse(course)}
-                      className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors"
-                    >
-                      <Icon name="download" className="w-4 h-4" />
-                      <span>View Certificate</span>
-                    </button>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setCertificateCourse(course)}
+                        className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors whitespace-nowrap"
+                      >
+                        <Icon name="award" className="w-4 h-4" />
+                        <span>View Certificate</span>
+                      </button>
+
+                      {cert?.verification_code && (
+                        <a
+                          href={`/verify-certificate/${cert.verification_code}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2 bg-white border border-brand-primary text-brand-primary text-sm font-semibold rounded-lg hover:bg-brand-primary/5 transition-colors whitespace-nowrap"
+                          title="Share this URL with employers to verify the certificate"
+                        >
+                          <Icon name="share" className="w-4 h-4" />
+                          <span>Share Link</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -144,10 +160,12 @@ export const Certificates: React.FC<CertificatesProps> = ({ user, courses }) => 
         </section>
       </div>
 
+      {/* 👈 HERE IS THE FIX: Pass the certificate object */}
       {certificateCourse && (
         <CertificateModal
           user={user}
           course={certificateCourse}
+          certificate={issuedByCourseId.get(String(certificateCourse.id))}
           onClose={() => setCertificateCourse(null)}
         />
       )}

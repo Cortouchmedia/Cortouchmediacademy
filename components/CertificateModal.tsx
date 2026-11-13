@@ -9,12 +9,14 @@ import { Icon } from './Icon';
 interface CertificateModalProps {
   user: User;
   course: Course;
+  certificate?: any; // 👈 NEW: Real certificate data
   onClose: () => void;
 }
 
 export const CertificateModal: React.FC<CertificateModalProps> = ({
   user,
   course,
+  certificate, // 👈 Destructure it
   onClose,
 }) => {
   const certificateRef = useRef<HTMLDivElement>(null);
@@ -145,6 +147,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                   user={user}
                   course={course}
                   certificateRef={certificateRef}
+                  certificate={certificate} // 👈 Pass it down
                 />
               </div>
             </div>

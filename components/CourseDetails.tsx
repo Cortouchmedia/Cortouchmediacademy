@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, Suspense } from 'react';
 import type { CourseWithEnrollment, User } from '../types';
 import { Icon } from './Icon';
 import { ProgressBar } from './ProgressBar';
@@ -8,7 +8,7 @@ import { PaystackButton } from './PaystackButton';
 import { InstructorAssistant } from './InstructorAssistant';
 import { CourseLandingPage } from './CourseLandingPage';
 import { useAppContext } from '../context/AppContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Api, authStorage } from '../lib/api';
 
 interface CourseDetailsProps {
@@ -46,7 +46,20 @@ function getYouTubeEmbed(url: string): string | null {
   return m ? `https://www.youtube.com/embed/${m[1]}` : null;
 }
 
-export const CourseDetails: React.FC<CourseDetailsProps> = ({
+function durationLabelFor(lesson: any): string {
+  if (!lesson) return '';
+  if (lesson.video_duration) {
+    const n = Number(lesson.video_duration);
+    return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`;
+  }
+  if (typeof lesson.duration === 'string') return lesson.duration;
+  return '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inner component (uses useSearchParams — wrapped in Suspense below)
+// ─────────────────────────────────────────────────────────────
+const CourseDetailsInner: React.FC<CourseDetailsProps> = ({
   user,
   course,
   allCourses,
@@ -58,20 +71,31 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
     handleSendCourseMessage: onSendCourseMessage,
   } = useAppContext();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const onBack = () => router.back();
 
-  const [activeTab, setActiveTab] = useState<CourseTab>('Curriculum');
+  // 🎯 Read `?tab=projects` from the URL, default to Curriculum
+  const initialTab: CourseTab =
+    searchParams.get('tab') === 'projects' ? 'Projects' : 'Curriculum';
+  const [activeTab, setActiveTab] = useState<CourseTab>(initialTab);
   const [activeLesson, setActiveLesson] = useState<any>(null);
 
-  // Per-project form state (keyed by project id)
+  // Keep tab in sync if the URL changes
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'projects' && activeTab !== 'Projects') {
+      setActiveTab('Projects');
+    }
+  }, [searchParams]);
+
+  // Per-project form state
   const [screenshotFiles, setScreenshotFiles] = useState<Record<string, File[]>>({});
   const [screenshotPreviews, setScreenshotPreviews] = useState<Record<string, string[]>>({});
   const [submissionDescriptions, setSubmissionDescriptions] = useState<Record<string, string>>({});
   const [submissionLinks, setSubmissionLinks] = useState<Record<string, string>>({});
   const [submittingProject, setSubmittingProject] = useState<string | null>(null);
 
-  // Per-student project deadlines (keyed by project id)
   const [deadlines, setDeadlines] = useState<Record<string, {
     deadline: string | null;
     source: 'course_completion' | 'instructor_default' | 'none';
@@ -90,8 +114,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
     [user, course.instructor_id],
   );
 
-  // Fetch each project's deadline for the current student
-  React.useEffect(() => {
+  // Fetch deadlines
+  useEffect(() => {
     if (!user || user.role !== 'student') return;
     if (!Array.isArray(course.projects) || course.projects.length === 0) return;
 
@@ -105,69 +129,52 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
       await Promise.all(
         course.projects.map(async (project: any) => {
           try {
-            const res = await Api.projects.deadline(
-              String(project.id),
-              user.id,
-              token,
-            );
+            const res = await Api.projects.deadline(String(project.id), user.id, token);
             results[String(project.id)] = res;
           } catch (err) {
-            console.warn(
-              `Failed to fetch deadline for project ${project.id}:`,
-              err,
-            );
+            console.warn(`Failed to fetch deadline for project ${project.id}:`, err);
           }
         }),
       );
       if (!cancelled) setDeadlines(results);
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user?.id, course.id, course.projects?.length]);
 
-    React.useEffect(() => {
-      if (!user || user.role !== 'student') return;
-      const token = authStorage.getToken();
-      if (!token) return;
-  
-      let cancelled = false;
-  
-      (async () => {
-        try {
-          const res: any = await Api.projects.studentSubmissions(user.id, token);
-          const list = Array.isArray(res) ? res : res?.data ?? [];
-  
-          // Keep only the latest submission per project
-          const byProject: Record<string, any> = {};
-          for (const s of list) {
-            const pid = String(s.project_id);
-            if (
-              !byProject[pid] ||
-              new Date(s.submitted_at) > new Date(byProject[pid].submitted_at)
-            ) {
-              byProject[pid] = s;
-            }
-          }
-          if (!cancelled) setMySubmissions(byProject);
-        } catch (err) {
-          console.warn('Failed to fetch student submissions:', err);
-        }
-      })();
-  
-      return () => {
-        cancelled = true;
-      };
-    }, [user?.id, course.id]);
+  // Fetch student submissions
+  useEffect(() => {
+    if (!user || user.role !== 'student') return;
+    const token = authStorage.getToken();
+    if (!token) return;
 
-  // Real, computed stats
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res: any = await Api.projects.studentSubmissions(user.id, token);
+        const list = Array.isArray(res) ? res : res?.data ?? [];
+
+        const byProject: Record<string, any> = {};
+        for (const s of list) {
+          const pid = String(s.project_id);
+          if (!byProject[pid] || new Date(s.submitted_at) > new Date(byProject[pid].submitted_at)) {
+            byProject[pid] = s;
+          }
+        }
+        if (!cancelled) setMySubmissions(byProject);
+      } catch (err) {
+        console.warn('Failed to fetch student submissions:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.id, course.id]);
+
+  // Computed stats
   const totalLessons = useMemo(() => {
     if (!Array.isArray(course.content)) return 0;
-    return course.content.reduce(
-      (acc: number, m: any) => acc + (m.lessons?.length ?? 0),
-      0,
-    );
+    return course.content.reduce((acc: number, m: any) => acc + (m.lessons?.length ?? 0), 0);
   }, [course.content]);
 
   const totalDurationMin = useMemo(() => {
@@ -198,10 +205,46 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
       await onEnrollmentSuccess(course.id);
     } catch (err) {
       console.error('Enrollment failed after payment:', err);
-      alert(
-        'Payment succeeded but enrollment failed. Please contact support with your transaction reference.',
-      );
+      alert('Payment succeeded but enrollment failed. Please contact support with your transaction reference.');
     }
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 🎯 COMPLETION DETECTION & AUTO-REDIRECT
+  // ─────────────────────────────────────────────────────────────
+  const checkCourseCompletion = (updatedCourse?: any) => {
+    if (isOwnerOrAdmin) return;
+
+    const target = updatedCourse ?? course;
+    const total = (target.content ?? []).reduce(
+      (acc: number, m: any) => acc + (m.lessons?.length ?? 0),
+      0,
+    );
+    const completed = (target.content ?? []).reduce(
+      (acc: number, m: any) =>
+        acc + (m.lessons ?? []).filter((l: any) => l.isCompleted).length,
+      0,
+    );
+
+    const willComplete = total > 0 && completed >= total;
+    if (!willComplete) return;
+
+    const hasProjects = (target.projects ?? []).length > 0;
+
+    // Delay so the DB update + state refresh can settle
+    setTimeout(() => {
+      if (hasProjects) {
+        const go = window.confirm(
+          '🎉 All lessons complete!\n\nYou must now submit your project to earn your certificate.\n\nGo to Project Submission?',
+        );
+        if (go) {
+          setActiveTab('Projects');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } else {
+        alert('🎉 Course complete! Your certificate will be issued shortly.');
+      }
+    }, 800);
   };
 
   const handleVideoEnd = (lessonId: number | string) => {
@@ -211,11 +254,19 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
       )
     ) {
       onToggleLessonComplete(course.id, lessonId);
+      setTimeout(() => checkCourseCompletion(), 900);
     }
   };
 
-  // ==================== PROJECT SUBMISSION HANDLERS ====================
+  // Manual toggle from lesson list
+  const handleToggleLesson = (lessonId: number | string) => {
+    onToggleLessonComplete(course.id, lessonId);
+    setTimeout(() => checkCourseCompletion(), 900);
+  };
 
+  // ─────────────────────────────────────────────────────────────
+  // PROJECT SUBMISSION
+  // ─────────────────────────────────────────────────────────────
   const handleScreenshotChange = (projectId: string, files: FileList | null) => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files).slice(0, 5);
@@ -226,13 +277,11 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
     }));
   };
 
-  const handleDescriptionChange = (projectId: string, text: string) => {
+  const handleDescriptionChange = (projectId: string, text: string) =>
     setSubmissionDescriptions((prev) => ({ ...prev, [projectId]: text }));
-  };
 
-  const handleLinkChange = (projectId: string, link: string) => {
+  const handleLinkChange = (projectId: string, link: string) =>
     setSubmissionLinks((prev) => ({ ...prev, [projectId]: link }));
-  };
 
   const canSubmit = (projectId: string) => {
     const desc = (submissionDescriptions[projectId] || '').trim();
@@ -261,36 +310,33 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
         submissionUrl: url || undefined,
         screenshots,
       });
-           // Clear form
-           setScreenshotFiles((prev) => ({ ...prev, [projectId]: [] }));
-           setScreenshotPreviews((prev) => ({ ...prev, [projectId]: [] }));
-           setSubmissionDescriptions((prev) => ({ ...prev, [projectId]: '' }));
-           setSubmissionLinks((prev) => ({ ...prev, [projectId]: '' }));
-     
-           // Refresh submissions so the card immediately flips to "Submitted"
-           if (user && user.role === 'student') {
-             const token = authStorage.getToken();
-             if (token) {
-               try {
-                 const res: any = await Api.projects.studentSubmissions(user.id, token);
-                 const list = Array.isArray(res) ? res : res?.data ?? [];
-                 const byProject: Record<string, any> = {};
-                 for (const s of list) {
-                   const p = String(s.project_id);
-                   if (
-                     !byProject[p] ||
-                     new Date(s.submitted_at) > new Date(byProject[p].submitted_at)
-                   ) {
-                     byProject[p] = s;
-                   }
-                 }
-                 setMySubmissions(byProject);
-               } catch (err) {
-                 console.warn('Failed to refresh submissions:', err);
-               }
-             }
-           }
-         } catch (err) {
+
+      setScreenshotFiles((prev) => ({ ...prev, [projectId]: [] }));
+      setScreenshotPreviews((prev) => ({ ...prev, [projectId]: [] }));
+      setSubmissionDescriptions((prev) => ({ ...prev, [projectId]: '' }));
+      setSubmissionLinks((prev) => ({ ...prev, [projectId]: '' }));
+
+      // Refresh submissions
+      if (user && user.role === 'student') {
+        const token = authStorage.getToken();
+        if (token) {
+          try {
+            const res: any = await Api.projects.studentSubmissions(user.id, token);
+            const list = Array.isArray(res) ? res : res?.data ?? [];
+            const byProject: Record<string, any> = {};
+            for (const s of list) {
+              const p = String(s.project_id);
+              if (!byProject[p] || new Date(s.submitted_at) > new Date(byProject[p].submitted_at)) {
+                byProject[p] = s;
+              }
+            }
+            setMySubmissions(byProject);
+          } catch (err) {
+            console.warn('Failed to refresh submissions:', err);
+          }
+        }
+      }
+    } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
     } finally {
       setSubmittingProject(null);
@@ -299,9 +345,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
 
   const prerequisiteCourses = course.prerequisiteCourseIds
     ? allCourses.filter((c) =>
-        course.prerequisiteCourseIds!.some(
-          (id) => String(id) === String(c.id),
-        ),
+        course.prerequisiteCourseIds!.some((id) => String(id) === String(c.id)),
       )
     : [];
 
@@ -344,9 +388,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
           </div>
           <div className="p-4 bg-white border-t border-gray-100">
             <h4 className="font-bold text-gray-900">{lesson.title}</h4>
-            <p className="text-sm text-brand-muted mt-1">
-              {durationLabelFor(lesson)}
-            </p>
+            <p className="text-sm text-brand-muted mt-1">{durationLabelFor(lesson)}</p>
           </div>
         </div>
       );
@@ -364,6 +406,9 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
     );
   };
 
+  const hasCertificate = !!(course as any).certificate;
+  const inProjectPhase = !hasCertificate && course.progress >= 100;
+
   return (
     <div className="space-y-8">
       {/* Instructor banner */}
@@ -371,8 +416,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
         <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <Icon name="info" className="w-5 h-5 text-blue-600 flex-shrink-0" />
           <p className="text-sm text-blue-900 flex-1">
-            <span className="font-semibold">Instructor Preview.</span>{' '}
-            You're seeing this page the way students do. Enrollment and progress are hidden.
+            <span className="font-semibold">Instructor Preview.</span> You're seeing this page the way students do.
           </p>
           <button
             onClick={() => router.push('/instructor-courses')}
@@ -384,7 +428,10 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
       )}
 
       {/* Hero */}
-      <div className="relative rounded-2xl overflow-hidden bg-cover bg-center text-white min-h-[360px] flex items-end" style={{ backgroundImage: `url(${course.imageUrl})` }}>
+      <div
+        className="relative rounded-2xl overflow-hidden bg-cover bg-center text-white min-h-[360px] flex items-end"
+        style={{ backgroundImage: `url(${course.imageUrl})` }}
+      >
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
         <div className="relative z-10 p-8 lg:p-10 w-full">
           <button
@@ -399,37 +446,24 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             <span className="inline-block text-xs font-bold tracking-wider uppercase text-brand-accent mb-3">
               {course.category}
             </span>
-            <h1 className="text-3xl lg:text-4xl font-bold mb-3 leading-tight">
-              {course.title}
-            </h1>
-            <p className="text-white/85 text-sm lg:text-base line-clamp-2 mb-6">
-              {course.description}
-            </p>
+            <h1 className="text-3xl lg:text-4xl font-bold mb-3 leading-tight">{course.title}</h1>
+            <p className="text-white/85 text-sm lg:text-base line-clamp-2 mb-6">{course.description}</p>
 
-            {/* Stat badges */}
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
               <span className="flex items-center gap-2">
                 <Icon name="star" className="w-4 h-4 text-yellow-400" />
                 <span className="font-semibold">{course.rating.toFixed(1)}</span>
-                <span className="text-white/70">
-                  ({course.reviews?.length ?? 0} reviews)
-                </span>
+                <span className="text-white/70">({course.reviews?.length ?? 0} reviews)</span>
               </span>
               <span className="flex items-center gap-2">
                 <Icon name="community" className="w-4 h-4" />
-                <span className="font-semibold">
-                  {course.enrollmentCount.toLocaleString()}
-                </span>
+                <span className="font-semibold">{course.enrollmentCount.toLocaleString()}</span>
                 <span className="text-white/70">students</span>
               </span>
               <span className="flex items-center gap-2">
                 <Icon name="bookOpen" className="w-4 h-4" />
-                <span className="font-semibold">
-                  {course.content?.length ?? 0}
-                </span>
-                <span className="text-white/70">
-                  module{(course.content?.length ?? 0) === 1 ? '' : 's'}
-                </span>
+                <span className="font-semibold">{course.content?.length ?? 0}</span>
+                <span className="text-white/70">module{(course.content?.length ?? 0) === 1 ? '' : 's'}</span>
               </span>
               <span className="flex items-center gap-2">
                 <Icon name="bell" className="w-4 h-4" />
@@ -448,16 +482,14 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             <p className="text-sm font-bold text-amber-900">Prerequisites</p>
             <p className="text-sm text-amber-800 mt-1">
               We recommend completing these first:{' '}
-              <span className="font-semibold">
-                {prerequisiteCourses.map((p) => p.title).join(', ')}
-              </span>
+              <span className="font-semibold">{prerequisiteCourses.map((p) => p.title).join(', ')}</span>
             </p>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main */}
+        {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
             <TabButton label="Curriculum" isActive={activeTab === 'Curriculum'} onClick={() => setActiveTab('Curriculum')} iconName="bookOpen" />
@@ -485,9 +517,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                   <div key={module.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                       <h3 className="font-bold text-gray-900">
-                        <span className="text-brand-muted text-sm mr-2">
-                          Module {mi + 1}
-                        </span>
+                        <span className="text-brand-muted text-sm mr-2">Module {mi + 1}</span>
                         {module.title}
                       </h3>
                       <span className="text-xs text-gray-500">
@@ -515,9 +545,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                               </span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-xs text-gray-500">
-                                {durationLabelFor(lesson)}
-                              </span>
+                              <span className="text-xs text-gray-500">{durationLabelFor(lesson)}</span>
                               {!isOwnerOrAdmin && (
                                 <div
                                   className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors cursor-pointer ${
@@ -527,7 +555,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                                   }`}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onToggleLessonComplete(course.id, lesson.id);
+                                    handleToggleLesson(lesson.id);
                                   }}
                                 >
                                   {lesson.isCompleted && (
@@ -551,14 +579,12 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             </div>
           )}
 
-{activeTab === 'Projects' && (
+          {activeTab === 'Projects' && (
             <div className="space-y-4">
               {(course.projects ?? []).map((project: any) => {
                 const pid = String(project.id);
                 const dl = deadlines[pid];
-                const isLate = dl?.deadline
-                  ? new Date(dl.deadline) < new Date()
-                  : false;
+                const isLate = dl?.deadline ? new Date(dl.deadline) < new Date() : false;
                 const isSubmitting = submittingProject === pid;
                 const sub = mySubmissions[pid];
                 const isSubmitted = !!sub;
@@ -587,41 +613,27 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                     </div>
                     <p className="text-sm text-brand-muted mt-2">{project.description}</p>
 
-                    {/* Deadline context line */}
                     {!isOwnerOrAdmin && dl && dl.source !== 'none' && (
                       <p className="text-xs text-brand-muted mt-2">
                         {dl.source === 'course_completion' && dl.course_completed_at
-                          ? `Your 3-week deadline started on ${new Date(
-                              dl.course_completed_at,
-                            ).toLocaleDateString()}.`
+                          ? `Your 3-week deadline started on ${new Date(dl.course_completed_at).toLocaleDateString()}.`
                           : dl.source === 'instructor_default'
                             ? 'Suggested deadline from your instructor. Complete the course to start your personal 3-week window.'
                             : ''}
                       </p>
                     )}
 
-{isSubmitted ? (
+                    {isSubmitted ? (
                       <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
                         <div className="flex items-center gap-2 mb-2">
                           <Icon name="checkCircle" className="w-5 h-5 text-brand-accent" />
-                          <span className="text-sm font-bold text-brand-accent">
-                            Submitted
-                          </span>
-                          {sub.is_late && (
-                            <span className="text-xs text-red-600 font-semibold">
-                              (Late)
-                            </span>
-                          )}
+                          <span className="text-sm font-bold text-brand-accent">Submitted</span>
+                          {sub.is_late && <span className="text-xs text-red-600 font-semibold">(Late)</span>}
                         </div>
                         {sub.submission_url && (
                           <p className="text-xs text-brand-muted mb-3 break-all">
                             Link:{' '}
-                            <a
-                              href={sub.submission_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-primary hover:underline"
-                            >
+                            <a href={sub.submission_url} target="_blank" rel="noopener noreferrer" className="text-brand-primary hover:underline">
                               {sub.submission_url}
                             </a>
                           </p>
@@ -629,30 +641,20 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                         {sub.grade != null ? (
                           <>
                             <p className="text-sm font-semibold text-gray-800">
-                              Score:{' '}
-                              <span className="text-brand-accent">
-                                {sub.grade} / {project.points_possible ?? 100}
-                              </span>
+                              Score: <span className="text-brand-accent">{sub.grade} / {project.points_possible ?? 100}</span>
                             </p>
                             {sub.feedback && (
-                              <p className="text-sm text-gray-600 mt-2 italic">
-                                "{sub.feedback}"
-                              </p>
+                              <p className="text-sm text-gray-600 mt-2 italic">"{sub.feedback}"</p>
                             )}
                           </>
                         ) : (
-                          <p className="text-sm text-brand-muted italic">
-                            Your instructor hasn't graded this yet.
-                          </p>
+                          <p className="text-sm text-brand-muted italic">Your instructor hasn't graded this yet.</p>
                         )}
                       </div>
                     ) : isOwnerOrAdmin ? (
-                      <p className="mt-4 text-sm text-gray-500 italic">
-                        Students will submit their work here.
-                      </p>
+                      <p className="mt-4 text-sm text-gray-500 italic">Students will submit their work here.</p>
                     ) : (
                       <div className="mt-4 space-y-3">
-                        {/* Screenshot uploader */}
                         <div>
                           <label className="block text-xs font-medium text-brand-muted mb-1">
                             Upload Screenshots (1–5) <span className="text-red-500">*</span>
@@ -668,18 +670,12 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                           {(screenshotPreviews[pid] ?? []).length > 0 && (
                             <div className="flex gap-2 mt-2 flex-wrap">
                               {(screenshotPreviews[pid] ?? []).map((src, i) => (
-                                <img
-                                  key={i}
-                                  src={src}
-                                  alt={`screenshot ${i + 1}`}
-                                  className="w-20 h-20 rounded object-cover border border-gray-200"
-                                />
+                                <img key={i} src={src} alt={`screenshot ${i + 1}`} className="w-20 h-20 rounded object-cover border border-gray-200" />
                               ))}
                             </div>
                           )}
                         </div>
 
-                        {/* Description */}
                         <div>
                           <label className="block text-xs font-medium text-brand-muted mb-1">
                             Description <span className="text-red-500">*</span>
@@ -694,11 +690,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                           />
                         </div>
 
-                        {/* Optional URL */}
                         <div>
-                          <label className="block text-xs font-medium text-brand-muted mb-1">
-                            Live URL / Repo (optional)
-                          </label>
+                          <label className="block text-xs font-medium text-brand-muted mb-1">Live URL / Repo (optional)</label>
                           <input
                             type="url"
                             placeholder="https://github.com/your-repo"
@@ -739,12 +732,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                 <h3 className="text-2xl font-bold text-gray-900">Reviews</h3>
                 <div className="flex items-center gap-2">
                   <Icon name="star" className="w-6 h-6 text-yellow-500 fill-current" />
-                  <span className="text-xl font-bold text-gray-900">
-                    {course.rating.toFixed(1)}
-                  </span>
-                  <span className="text-gray-500">
-                    ({course.reviews?.length ?? 0})
-                  </span>
+                  <span className="text-xl font-bold text-gray-900">{course.rating.toFixed(1)}</span>
+                  <span className="text-gray-500">({course.reviews?.length ?? 0})</span>
                 </div>
               </div>
               <div className="grid gap-4">
@@ -761,11 +750,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                           <h4 className="font-bold text-gray-900">{review.author}</h4>
                           <div className="flex items-center gap-1">
                             {[...Array(5)].map((_, i) => (
-                              <Icon
-                                key={i}
-                                name="star"
-                                className={`w-3 h-3 ${i < review.rating ? 'text-yellow-500 fill-current' : 'text-gray-300'}`}
-                              />
+                              <Icon key={i} name="star" className={`w-3 h-3 ${i < review.rating ? 'text-yellow-500 fill-current' : 'text-gray-300'}`} />
                             ))}
                           </div>
                         </div>
@@ -786,10 +771,7 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             <div className="space-y-4">
               {course.webinars && course.webinars.length > 0 ? (
                 course.webinars.map((webinar: any) => (
-                  <div
-                    key={webinar.id}
-                    className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-4"
-                  >
+                  <div key={webinar.id} className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                     <div>
                       <h4 className="font-bold text-gray-800">{webinar.title}</h4>
                       <p className="text-sm text-brand-muted mt-1">{webinar.date}</p>
@@ -797,19 +779,13 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                     {!isOwnerOrAdmin && (
                       <div className="flex-shrink-0">
                         {webinar.status === 'live' && (
-                          <button className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 animate-pulse">
-                            Join Live
-                          </button>
+                          <button className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 animate-pulse">Join Live</button>
                         )}
                         {webinar.status === 'upcoming' && (
-                          <button className="px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90">
-                            Add to Calendar
-                          </button>
+                          <button className="px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90">Add to Calendar</button>
                         )}
                         {webinar.status === 'ended' && (
-                          <button disabled className="px-4 py-2 bg-gray-200 text-gray-500 text-sm font-semibold rounded-lg cursor-not-allowed">
-                            Session Ended
-                          </button>
+                          <button disabled className="px-4 py-2 bg-gray-200 text-gray-500 text-sm font-semibold rounded-lg cursor-not-allowed">Session Ended</button>
                         )}
                       </div>
                     )}
@@ -827,7 +803,6 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
 
         {/* Sidebar */}
         <aside className="space-y-6">
-          {/* Primary action card */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
             {isOwnerOrAdmin ? (
               <div>
@@ -852,19 +827,50 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
                 </div>
                 <ProgressBar progress={course.progress} />
                 <p className="text-xs text-brand-muted mt-3 text-center">
-                  {course.completed ? 'Course completed! 🎉' : `${totalLessons} lesson${totalLessons === 1 ? '' : 's'} total`}
+                  {hasCertificate
+                    ? 'Course completed! 🎉'
+                    : inProjectPhase
+                      ? '🎓 Lessons complete — submit your project'
+                      : `${totalLessons} lesson${totalLessons === 1 ? '' : 's'} total`}
                 </p>
+
+                {/* 🎯 Certificate button */}
+                {hasCertificate && (
+                  <a
+                    href={`/verify-certificate/${(course as any).certificate.verification_code}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 w-full py-2.5 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                  >
+                    <Icon name="award" className="w-5 h-5" />
+                    View Certificate
+                  </a>
+                )}
+
+                {/* 🎯 Project-phase hint */}
+                {inProjectPhase && (
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-800 font-semibold text-center">
+                      🎓 Lessons complete! Submit your project to unlock your certificate.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setActiveTab('Projects');
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="mt-2 w-full py-2 bg-amber-500 text-white text-sm font-bold rounded-lg hover:bg-amber-600 transition"
+                    >
+                      Go to Projects →
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                  {course.price === 0
-                    ? 'Free'
-                    : `₦${course.price.toLocaleString()}`}
+                  {course.price === 0 ? 'Free' : `₦${course.price.toLocaleString()}`}
                 </h3>
-                <p className="text-xs text-brand-muted mb-4">
-                  One-time payment · Lifetime access
-                </p>
+                <p className="text-xs text-brand-muted mb-4">One-time payment · Lifetime access</p>
                 {user ? (
                   course.price === 0 ? (
                     <button
@@ -894,59 +900,32 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
             )}
           </div>
 
-          {/* Course details */}
           <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
-              Course Info
-            </h3>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Course Info</h3>
             <ul className="space-y-3 text-sm">
               <li className="flex items-center gap-3">
                 <Icon name="academicCap" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Instructor:</span>{' '}
-                  <span className="font-semibold text-gray-900">{course.instructor}</span>
-                </span>
+                <span><span className="text-brand-muted">Instructor:</span>{' '}<span className="font-semibold text-gray-900">{course.instructor}</span></span>
               </li>
               <li className="flex items-center gap-3">
                 <Icon name="bookOpen" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Modules:</span>{' '}
-                  <span className="font-semibold text-gray-900">
-                    {course.content?.length ?? 0}
-                  </span>
-                </span>
+                <span><span className="text-brand-muted">Modules:</span>{' '}<span className="font-semibold text-gray-900">{course.content?.length ?? 0}</span></span>
               </li>
               <li className="flex items-center gap-3">
                 <Icon name="document" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Lessons:</span>{' '}
-                  <span className="font-semibold text-gray-900">{lessonCountLabel.replace('lesson', '').trim()}</span>
-                </span>
+                <span><span className="text-brand-muted">Lessons:</span>{' '}<span className="font-semibold text-gray-900">{lessonCountLabel.replace('lesson', '').trim()}</span></span>
               </li>
               <li className="flex items-center gap-3">
                 <Icon name="bell" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Duration:</span>{' '}
-                  <span className="font-semibold text-gray-900">{durationLabel}</span>
-                </span>
+                <span><span className="text-brand-muted">Duration:</span>{' '}<span className="font-semibold text-gray-900">{durationLabel}</span></span>
               </li>
               <li className="flex items-center gap-3">
                 <Icon name="community" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Students:</span>{' '}
-                  <span className="font-semibold text-gray-900">
-                    {course.enrollmentCount.toLocaleString()}
-                  </span>
-                </span>
+                <span><span className="text-brand-muted">Students:</span>{' '}<span className="font-semibold text-gray-900">{course.enrollmentCount.toLocaleString()}</span></span>
               </li>
               <li className="flex items-center gap-3">
                 <Icon name="star" className="w-4 h-4 text-brand-muted" />
-                <span>
-                  <span className="text-brand-muted">Rating:</span>{' '}
-                  <span className="font-semibold text-gray-900">
-                    {course.rating.toFixed(1)}/5.0
-                  </span>
-                </span>
+                <span><span className="text-brand-muted">Rating:</span>{' '}<span className="font-semibold text-gray-900">{course.rating.toFixed(1)}/5.0</span></span>
               </li>
             </ul>
           </div>
@@ -957,12 +936,8 @@ export const CourseDetails: React.FC<CourseDetailsProps> = ({
 };
 
 
-function durationLabelFor(lesson: any): string {
-  if (!lesson) return '';
-  if (lesson.video_duration) {
-    const n = Number(lesson.video_duration);
-    return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`;
-  }
-  if (typeof lesson.duration === 'string') return lesson.duration;
-  return '';
-}
+export const CourseDetails: React.FC<CourseDetailsProps> = (props) => (
+  <Suspense fallback={<div className="p-12 text-center text-gray-500">Loading course…</div>}>
+    <CourseDetailsInner {...props} />
+  </Suspense>
+);
