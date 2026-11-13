@@ -24,8 +24,10 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // 👈 NEW: State for Viewing User Details
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Record<string, number>>({});
   const [viewingUser, setViewingUser] = useState<any | null>(null);
+  const [studentEnrollments, setStudentEnrollments] = useState<any[]>([]);
+  const [loadingEnrollments, setLoadingEnrollments] = useState(false);
 
   const fetchData = async () => {
     const token = authStorage.getToken();
@@ -56,6 +58,36 @@ export default function AdminUsersPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (users.length === 0) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+  
+    const students = users.filter(u => (u.role ?? '').toUpperCase() === 'STUDENT');
+    if (students.length === 0) return;
+  
+    let cancelled = false;
+  
+    Promise.all(
+      students.map(async (u) => {
+        try {
+          const res: any = await api.get(`/courses/users/${u.id}/enrollments`, token);
+          const list = Array.isArray(res) ? res : res?.data ?? [];
+          return { id: u.id, count: list.length };
+        } catch {
+          return { id: u.id, count: 0 };
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const map: Record<string, number> = {};
+      results.forEach(r => { map[r.id] = r.count; });
+      setEnrollmentCounts(map);
+    });
+  
+    return () => { cancelled = true; };
+  }, [users]);
 
   // Calculate Course Count & List per Instructor
   const coursesByInstructor = useMemo(() => {
@@ -117,6 +149,34 @@ export default function AdminUsersPage() {
       alert(`Failed to delete user: ${err.message}`);
     }
   };
+
+  const handleOpenUserProfile = async (user: any) => {
+    const isStudent = (user.role ?? '').toUpperCase() === 'STUDENT';
+    
+    setStudentEnrollments([]);
+    setLoadingEnrollments(isStudent);   // 👈 moved up
+    setViewingUser(user);
+  
+    if (!isStudent) return;
+  
+    try {
+      const token = authStorage.getToken();
+      if (!token) return;
+      
+      const res: any = await api.get(`/courses/users/${user.id}/enrollments`, token);
+      console.log('[DEBUG] raw response:', res);          // 👈 add this
+      console.log('[DEBUG] first course:', courses[0]);    // 👈 add this
+      
+      const list = Array.isArray(res) ? res : res?.data ?? [];
+      console.log('[DEBUG] parsed list:', list);           // 👈 add this
+      setStudentEnrollments(list);
+    } catch (err: any) {
+      console.error('Failed to load enrollments:', err);
+    } finally {
+      setLoadingEnrollments(false);
+    }
+  };
+
 
   // Filter Logic
   const filteredUsers = users.filter(u => {
@@ -218,7 +278,7 @@ export default function AdminUsersPage() {
                         {/* 👈 User Details (Now clickable) */}
                         <td className="px-6 py-4">
                           <button 
-                            onClick={() => setViewingUser(user)}
+                            onClick={() => handleOpenUserProfile(user)}
                             className="flex items-center gap-4 text-left group/user"
                           >
                             {user.avatar_url ? (
@@ -268,10 +328,10 @@ export default function AdminUsersPage() {
                             </div>
                           ) : user.role.toUpperCase() === 'STUDENT' ? (
                             <div className="flex items-center gap-3">
-                               <div className="bg-white text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 shadow-sm flex items-center gap-1.5">
-                                <Icon name="bookOpen" className="w-3.5 h-3.5 text-green-500" />
-                                {user.enrolled_course_ids?.length || 0} Enrolled
-                              </div>
+                             <div className="bg-white text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-200 shadow-sm flex items-center gap-1.5">
+  <Icon name="bookOpen" className="w-3.5 h-3.5 text-green-500" />
+  {enrollmentCounts[user.id] ?? user.enrollment_count ?? 0} Enrolled
+</div>
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
@@ -403,23 +463,78 @@ export default function AdminUsersPage() {
               )}
 
               {/* Student Details */}
-              {viewingUser.role.toUpperCase() === 'STUDENT' && (
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <Icon name="bookOpen" className="w-4 h-4 text-green-500" />
-                    Enrolled Courses ({viewingUser.enrolled_course_ids?.length || 0})
-                  </h3>
-                  {(!viewingUser.enrolled_course_ids || viewingUser.enrolled_course_ids.length === 0) ? (
-                    <p className="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-xl">This student is not enrolled in any courses yet.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {/* Note: Without fetching all enrollments with course titles, we just show the IDs here. 
-                          If your backend sends course titles inside enrolled_course_ids, you can map them here! */}
-                      <p className="text-sm text-gray-600">This student is actively enrolled in {viewingUser.enrolled_course_ids.length} course(s).</p>
+{viewingUser.role.toUpperCase() === 'STUDENT' && (
+  <div>
+    <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+      <Icon name="bookOpen" className="w-4 h-4 text-green-500" />
+      Enrolled Courses ({studentEnrollments.length})
+    </h3>
+
+    {loadingEnrollments ? (
+      <div className="space-y-2">
+        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+      </div>
+    ) : studentEnrollments.length === 0 ? (
+      <p className="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-xl">
+        This student is not enrolled in any courses yet.
+      </p>
+    ) : (
+      <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+        {studentEnrollments.map((enr, idx) => {
+          // Match the enrollment to the course list to get title/image
+          const courseMeta = courses.find(
+            (c) => String(c.id) === String(enr.course_id)
+          );
+          const progress = Math.round(Number(enr.progress_percentage ?? 0));
+          const completed = progress >= 100 || !!enr.completed_at;
+
+          return (
+            <div
+              key={enr.id ?? enr.course_id ?? idx}
+              className="p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                {courseMeta?.image_url || courseMeta?.imageUrl ? (
+                  <img
+                    src={courseMeta.image_url ?? courseMeta.imageUrl}
+                    alt=""
+                    className="w-10 h-10 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                    <Icon name="courses" className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900 truncate">
+                    {courseMeta?.title ?? 'Unknown Course'}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${completed ? 'bg-green-500' : 'bg-[#219BD5]'}`}
+                        style={{ width: `${progress}%` }}
+                      />
                     </div>
-                  )}
+                    <span className="text-[10px] font-bold text-gray-500 whitespace-nowrap">
+                      {progress}%
+                    </span>
+                  </div>
                 </div>
-              )}
+                {completed && (
+                  <span className="text-[9px] font-black uppercase px-2 py-1 bg-green-50 text-green-700 border border-green-200 rounded-md">
+                    Done
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+)}
 
             </div>
           </div>

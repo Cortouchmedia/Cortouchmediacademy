@@ -8,7 +8,8 @@ export interface User {
   email: string;
   avatarUrl: string;
   role: 'student' | 'admin' | 'instructor' | 'superadmin';
-  enrolledCourseIds: string[]; // 👈 Changed to string[] because Supabase IDs are UUIDs
+  enrolledCourseIds: string[];
+  enrollmentCount?: number; 
 }
 
 export interface ChatMessage {

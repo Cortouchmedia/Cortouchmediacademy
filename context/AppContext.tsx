@@ -162,6 +162,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const normalizeCourse = (raw: any): Course => {
     const safeArray = (v: any): any[] => (Array.isArray(v) ? v : []);
   
+    // Derive a single source of truth for "published"
+    const rawStatus = String(raw.status ?? '').toUpperCase();
+    const rawPublished =
+      raw.is_published === true ||
+      raw.is_published === 1 ||
+      raw.is_published === 'true' ||
+      rawStatus === 'PUBLISHED' ||
+      rawStatus === 'APPROVED';
+  
     return {
       id: raw.id,
       title: raw.title ?? '',
@@ -191,6 +200,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })),
       })),
       projects: safeArray(raw.projects),
+
+      is_published: rawPublished,
+      status: rawPublished ? 'PUBLISHED' : (rawStatus || 'DRAFT'),
+  
       progress: 0,
       completed: false,
       reviews: safeArray(raw.reviews),
@@ -200,7 +213,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       requirements: safeArray(raw.requirements),
       features: safeArray(raw.features),
       prerequisiteCourseIds: safeArray(raw.prerequisiteCourseIds),
-    };
+    } as Course;
   };
  
   useEffect(() => {
@@ -325,6 +338,7 @@ useEffect(() => {
         avatarUrl: u.avatar_url ?? '',
         role: u.role,
         enrolledCourseIds: [],
+        enrollmentCount: u.enrollment_count ?? 0,
       }));
 
       setUsers(mappedUsers);
@@ -877,13 +891,28 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
   const handleCourseApprove = async (courseId: number | string): Promise<void> => {
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
-    
+  
     const idStr = String(courseId);
-
-    // 1. Tell the backend to approve it. 
-    // The await ensures the DB is fully updated before this function resolves.
+  
+    // 1. Approve on the backend
     await api.put(`/courses/${idStr}/approve`, {}, token);
-    
+  
+    // 2. Optimistic update so the UI flips instantly (Pending → Published)
+    setCourses((prev) =>
+      prev.map((c) =>
+        String(c.id) === idStr
+          ? { ...c, is_published: true, status: 'PUBLISHED' } as any
+          : c
+      )
+    );
+  
+    // 3. Re-sync from server in the background (cache-busted)
+    try {
+      await refreshCourses();
+    } catch (e) {
+      console.warn('Post-approve refresh failed:', e);
+    }
+  
     logAuditEvent('Course Approved', `Approved course ${courseId}`, 'course');
   };
 

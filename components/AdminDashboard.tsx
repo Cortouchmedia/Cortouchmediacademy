@@ -90,6 +90,7 @@ const Card = ({ title, action, children }: any) => (
   </div>
 );
 
+
 const BarChart = ({ data, maxBars = 6 }: any) => {
   const trimmed = data.slice(0, maxBars);
   const max = Math.max(...trimmed.map((d: any) => d.value), 1);
@@ -164,6 +165,9 @@ export const AdminDashboard: React.FC = () => {
   // Search & Pagination State
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllUsers, setShowAllUsers] = useState(false);
+  
+  // 👈 Student Management State
+  const [manageStudent, setManageStudent] = useState<AdminUser | null>(null);
 
   const fetchData = async () => {
     const token = authStorage.getToken();
@@ -175,7 +179,7 @@ export const AdminDashboard: React.FC = () => {
     // Fetch users, courses, and logs
     const [usersRes, coursesRes, logsRes] = await Promise.allSettled([
       ApiAdmin.listUsers(token),
-      api.get<any>("/courses"),
+      api.get<any>(`/courses?t=${Date.now()}`),
       ApiAdmin.viewAuditLogs(token).catch(() => []),
     ]);
 
@@ -268,7 +272,6 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
       .slice(0, 6);
 
-    // Calculate Course Count per Instructor
     const coursesByInstructor = courses.reduce((acc, c) => {
       if (c.instructor_id) {
         acc[c.instructor_id] = (acc[c.instructor_id] || 0) + 1;
@@ -276,12 +279,9 @@ export const AdminDashboard: React.FC = () => {
       return acc;
     }, {} as Record<string, number>);
 
-    // Calculate Enrollments per Student 
-    const enrollmentsByStudent: Record<string, number> = {}; 
-
     return {
       totalUsers, totalCourses, newUsers7d, totalEnrollments, totalRevenue,
-      roleCounts, topCourses, topCategories, recentUsers, coursesByInstructor, enrollmentsByStudent,
+      roleCounts, topCourses, topCategories, recentUsers, coursesByInstructor,
     };
   }, [users, courses]);
 
@@ -342,10 +342,9 @@ export const AdminDashboard: React.FC = () => {
         <StatCard title="Total Revenue" value={fmtCurrency(metrics.totalRevenue)} sub="Course sales (gross)" icon="trendingUp" accent={{ bg: "bg-[#EF4444]/10", text: "text-[#EF4444]" }} onClick={() => router.push("/admin/reports")} />
       </div>
 
-      {/* 🔥 THE NEW PROFESSIONAL USER MANAGEMENT TABLE */}
+      {/* User Management Table */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         
-        {/* Table Header Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-5 border-b border-gray-100 bg-gray-50/50">
           <div>
             <h2 className="text-lg font-bold text-gray-900">User Management & Approvals</h2>
@@ -388,7 +387,6 @@ export const AdminDashboard: React.FC = () => {
               {displayedUsers.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50/80 transition-colors group">
                   
-                  {/* 1. User Details */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       {u.avatar_url ? (
@@ -405,7 +403,6 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </td>
 
-                  {/* 2. Role Badge */}
                   <td className="px-6 py-4">
                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
                       u.role === "superadmin" ? "bg-purple-100 text-purple-700 border border-purple-200" :
@@ -417,7 +414,6 @@ export const AdminDashboard: React.FC = () => {
                     </span>
                   </td>
 
-                  {/* 3. Instructor Approvals Column */}
                   <td className="px-6 py-4">
                     {u.role === "instructor" ? (
                       <div className="flex items-center gap-2">
@@ -429,7 +425,7 @@ export const AdminDashboard: React.FC = () => {
                           onClick={() => router.push(`/admin/courses?instructor=${u.id}`)}
                           className="text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                         >
-                          Review & Approve
+                          Review
                         </button>
                       </div>
                     ) : (
@@ -437,21 +433,20 @@ export const AdminDashboard: React.FC = () => {
                     )}
                   </td>
 
-                  {/* 4. Student Progress Column */}
                   <td className="px-6 py-4">
                     {u.role === "student" ? (
-                      <div className="flex items-center gap-2">
-                        <div className="bg-green-50 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-green-100 flex items-center gap-1.5">
-                          <Icon name="bookOpen" className="w-3.5 h-3.5" />
-                          {metrics.enrollmentsByStudent[u.id] || 0} Enrolled
-                        </div>
-                      </div>
+                      <button 
+                        onClick={() => setManageStudent(u)}
+                        className="bg-green-50 text-green-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-green-100 flex items-center gap-1.5 hover:bg-green-100 transition-colors"
+                      >
+                        <Icon name="bookOpen" className="w-3.5 h-3.5" />
+                        View Progress
+                      </button>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
 
-                  {/* 5. Actions */}
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button 
@@ -531,7 +526,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Recent activity */}
       {auditLogs.length > 0 && (
-        <Card title="Recent Activity" action={<button onClick={() => router.push("/admin/audit-logs")} className="text-xs font-bold text-[#219BD5] hover:underline">Full log →</button>}>
+        <Card title="Recent Activity" action={<button onClick={() => router.push("/admin/audit-log")} className="text-xs font-bold text-[#219BD5] hover:underline">Full log →</button>}>
           <ul className="space-y-3">
             {auditLogs.slice(0, 8).map((log) => (
               <li key={log.id} className="flex items-start gap-3 text-sm">
@@ -546,6 +541,175 @@ export const AdminDashboard: React.FC = () => {
           </ul>
         </Card>
       )}
+
+      {/* 👈 STUDENT DETAILS MODAL */}
+      {manageStudent && (
+        <StudentDetailsModal 
+          student={manageStudent} 
+          onClose={() => setManageStudent(null)} 
+        />
+      )}
     </div>
   );
 };
+
+// ---------------------------------------------------------------
+// Student Details Modal
+// ---------------------------------------------------------------
+function StudentDetailsModal({ student, onClose }: { student: AdminUser, onClose: () => void }) {
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+
+  useEffect(() => {
+    const fetchStudentData = async () => {
+      const token = authStorage.getToken();
+      if (!token) return;
+
+      try {
+        // Fetch enrollments and certificates in parallel
+        const [enrollmentsRes, certsRes] = await Promise.allSettled([
+          api.get<any>(`/courses/users/${student.id}/enrollments`, token),
+          api.get<any>(`/certificates/my-certificates?userId=${student.id}`, token)
+        ]);
+
+        if (enrollmentsRes.status === "fulfilled") {
+          const list = Array.isArray(enrollmentsRes.value) ? enrollmentsRes.value : enrollmentsRes.value?.data ?? [];
+          setEnrollments(list);
+        }
+
+        if (certsRes.status === "fulfilled") {
+          const list = Array.isArray(certsRes.value) ? certsRes.value : certsRes.value?.data ?? [];
+          setCertificates(list);
+        }
+      } catch (err) {
+        console.error("Failed to load student details", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentData();
+  }, [student.id]);
+
+  const handleResetPassword = async () => {
+    if (!confirm(`Are you sure you want to send a password reset email to ${student.email}?`)) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+
+    setResetting(true);
+    try {
+      await ApiAdmin.resetPassword(student.id, token);
+      alert(`✅ Password reset link sent successfully to ${student.email}`);
+    } catch (err: any) {
+      alert(`❌ Failed to reset password: ${err.message}`);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        {/* Modal Header */}
+        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <div className="flex items-center gap-4">
+             {student.avatar_url ? (
+                <img src={student.avatar_url} alt="avatar" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-[#219BD5] text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                  {(student.full_name || student.email || "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{student.full_name || "Unnamed Student"}</h2>
+                <p className="text-sm text-gray-500">{student.email}</p>
+              </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+            <Icon name="close" className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-6">
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#219BD5]" />
+            </div>
+          ) : (
+            <>
+              {/* Courses Enrolled */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Icon name="bookOpen" className="w-4 h-4 text-[#219BD5]" />
+                  Enrolled Courses ({enrollments.length})
+                </h3>
+                {enrollments.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-lg">No courses enrolled yet.</p>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl divide-y divide-gray-100">
+                    {enrollments.map((enr: any) => (
+                      <div key={enr.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{enr.course?.title || enr.course_title || "Unknown Course"}</p>
+                          <p className="text-xs text-gray-500">Progress: {enr.progress || 0}%</p>
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${enr.completed_at ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {enr.completed_at ? 'Completed' : 'In Progress'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Certificates */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Icon name="award" className="w-4 h-4 text-[#F59E0B]" />
+                  Certificates Earned ({certificates.length})
+                </h3>
+                {certificates.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic bg-gray-50 p-4 rounded-lg">No certificates earned yet.</p>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl divide-y divide-gray-100">
+                    {certificates.map((cert: any) => (
+                      <div key={cert.id} className="p-4 flex justify-between items-center hover:bg-gray-50">
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm">{cert.course_title || cert.course?.title || "Certificate"}</p>
+                          <p className="text-xs text-gray-500">Issued: {new Date(cert.issue_date || cert.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <a href={cert.certificate_url || "#"} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-[#219BD5] hover:underline">
+                          View Certificate
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Modal Footer / Actions */}
+        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+          <button
+            onClick={handleResetPassword}
+            disabled={resetting}
+            className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 font-bold text-sm rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+          >
+            <Icon name="refresh" className="w-4 h-4" />
+            {resetting ? "Sending..." : "Reset Password"}
+          </button>
+          <button onClick={onClose} className="px-6 py-2 bg-gray-900 text-white font-bold text-sm rounded-lg hover:bg-gray-800 transition-colors">
+            Close
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}

@@ -53,7 +53,8 @@ export async function apiFetch<T = unknown>(
     ...rest,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: 'no-store', 
+    cache: 'no-store',
+    next: { revalidate: 0 },   // 👈 ADD THIS — disables Next.js Data Cache
   });
 
  const text = await res.text();
@@ -589,6 +590,7 @@ export interface AdminUser {
   avatar_url?: string | null;
   created_at?: string;
   updated_at?: string;
+  enrollment_count?: number;
 }
 
 export interface UserRoleUpdateResponse {
@@ -627,6 +629,100 @@ export const ApiAdmin = {
       '/auth/users/audit-logs', 
       token,
     ),
+
+  // 👈 Added resetPassword function
+  resetPassword: (userId: string, token: string) =>
+    api.post<{ message: string }>(`/auth/users/${userId}/reset-password`, {}, token),
+};
+
+
+// ============================================================
+// Revenue API (admin)
+// ============================================================
+
+export const ApiRevenue = {
+  platformStats: (token: string) =>
+    api.get<{
+      total_platform_fees: number;
+      total_payouts_processed: number;
+      pending_payouts: number;
+      active_instructors: number;
+    }>('/revenue/admin/platform-stats', token),
+
+    requestPayout: (
+      body: { instructor_id: string; amount: number; payment_method?: string; notes?: string },
+      token: string,
+      ) => api.post<{ message: string; payout: any }>('/revenue/payouts/request', body, token),
+
+      getPayouts: (instructorId: string, token: string) =>
+      api.get<{
+        payouts: Array<{
+          id: string;
+          amount: number;
+          status: string;
+          reference: string;
+          bank_name: string | null;
+          account_number: string | null;
+          created_at: string;
+        }>;
+        pagination: { page: number; limit: number; total: number; totalPages: number };
+      }>(`/revenue/instructor/${instructorId}/payouts`, token),
+
+  allPayouts: (token: string, status?: string) =>
+    api.get<{
+      payouts: Array<{
+        id: string;
+        instructor_id: string;
+        amount: number;
+        fee: number;
+        net_amount: number;
+        status: 'pending' | 'processing' | 'completed' | 'failed';
+        reference: string;
+        bank_name: string | null;
+        account_number: string | null;
+        account_name: string | null;
+        notes: string | null;
+        created_at: string;
+        processed_at: string | null;
+        completed_at: string | null;
+        instructor?: { id: string; full_name: string; email: string };
+      }>;
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/revenue/admin/payouts${status ? `?status=${status}` : ''}`, token),
+
+  processPayout: (
+    body: { payout_id: string; admin_id: string; reference?: string },
+    token: string,
+  ) => api.post('/revenue/admin/payouts/process', body, token),
+
+  completePayout: (payoutId: string, reference: string, token: string) =>
+    api.post(`/revenue/admin/payouts/${payoutId}/complete`, { reference }, token),
+
+  failPayout: (payoutId: string, reason: string, token: string) =>
+    api.post(`/revenue/admin/payouts/${payoutId}/fail`, { reason }, token),
+
+  adminInitiatePayout: (
+    body: {
+      instructor_id: string;
+      amount: number;
+      payment_method?: string;
+      reference?: string;
+      notes?: string;
+    },
+    token: string,
+  ) => api.post('/revenue/admin/initiate', body, token),
+
+  instructorSummary: (instructorId: string, token: string) =>
+    api.get<{
+      total_earnings: number;
+      total_platform_fees: number;
+      available_balance: number;
+      pending_balance: number;
+      paid_balance: number;
+      this_month_earnings: number;
+      top_courses: Array<{ course_id: string; title: string; earnings: number }>;
+      total_transactions: number;
+    }>(`/revenue/instructor/${instructorId}/summary`, token),
 };
 
 export default api;

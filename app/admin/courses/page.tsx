@@ -60,29 +60,21 @@ function CoursesContent() {
     return <div className="p-12 text-center text-gray-500 bg-[#f8fafc] min-h-screen">You do not have permission.</div>;
   }
 
-   // Handle Approve Action
-   const handleApprove = async (courseId: string | number) => {
-    const stringId = String(courseId);
-    setApprovingId(stringId);
-    
-    try {
-      // 1. Await the backend (AppContext waits for the DB)
-      await handleCourseApprove(stringId); 
-      
-      // 2. Show success
-      alert("Course approved successfully! It is now live.");
-      
-      // 3. Force a HARD reload (true bypasses cache)
-      setTimeout(() => {
-        window.location.reload();
-      }, 200);
-
-    } catch (err: any) {
-      alert(`Failed to approve course: ${err.message}`);
-      setApprovingId(null);
-    }
-  };
-
+    // Handle Approve Action
+    const handleApprove = async (courseId: string | number) => {
+      const stringId = String(courseId);
+      setApprovingId(stringId);
+  
+      try {
+        await handleCourseApprove(stringId);
+        alert("Course approved successfully! It is now live.");
+        // ✅ No reload — context state update re-renders this page automatically
+      } catch (err: any) {
+        alert(`Failed to approve course: ${err.message}`);
+      } finally {
+        setApprovingId(null);   // ✅ ALWAYS clear the "Approving..." spinner
+      }
+    };
 
 
   const filteredCourses = instructorId 

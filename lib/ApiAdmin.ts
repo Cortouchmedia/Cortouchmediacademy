@@ -10,6 +10,7 @@ export interface AdminUser {
   avatar_url?: string | null;
   created_at?: string;
   updated_at?: string;
+  enrollment_count?: number; 
 }
 
 export interface UserRoleUpdateResponse {
@@ -66,6 +67,16 @@ export const ApiAdmin = {
       '/auth/users/audit-logs', 
       token,
     ),
+
+
+    approveCourse: (courseId: string | number, token: string) =>
+    api.patch<{ message: string; course: any }>(
+      `/courses/${courseId}/approve`,
+      {},
+      token,
+    ),
 };
+
+
 
 export default ApiAdmin;

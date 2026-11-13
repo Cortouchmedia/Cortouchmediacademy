@@ -7,6 +7,7 @@ import { useAppContext } from '../context/AppContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { usePendingSubmissions } from '../hooks/usePendingSubmissions';
 import { useRouter } from 'next/navigation';
+import { authStorage, ApiRevenue } from '../lib/api'; // 👈 Imported API
 
 interface HeaderProps {
   user: User;
@@ -42,12 +43,31 @@ export const Header: React.FC<HeaderProps> = ({
   const { language } = useAppContext();
   const router = useRouter();
 
-  const { count: pendingCount, items: pendingItems } =
-    usePendingSubmissions(user);
+  // Instructor submissions
+  const { count: pendingCount, items: pendingItems } = usePendingSubmissions(user);
 
+  // 👈 Admin Payouts State
+  const [adminPayouts, setAdminPayouts] = useState<any[]>([]);
+  
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   const notificationRef = useRef<HTMLDivElement>(null);
+
+  const isInstructor = user.role === 'instructor';
+  const isAdmin = user.role === 'admin' || user.role === 'superadmin';
+
+  // 👈 Fetch pending payouts for Admins
+  useEffect(() => {
+    if (!isAdmin) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+
+    ApiRevenue.allPayouts(token, 'pending')
+      .then((res) => {
+        setAdminPayouts(res?.payouts ?? []);
+      })
+      .catch((err) => console.error("Failed to fetch admin payouts", err));
+  }, [isAdmin]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -64,21 +84,29 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [isNotificationsOpen]);
 
+  // Determine total count based on role
+  const totalPending = isAdmin ? adminPayouts.length : (isInstructor ? pendingCount : 0);
+
   // When the dropdown opens, remember how many items were "seen"
   const openNotifications = () => {
     setIsNotificationsOpen((open) => !open);
-    setSeenCount(pendingCount);
+    setSeenCount(totalPending);
   };
 
-  const hasUnseen = pendingCount > seenCount && pendingCount > 0;
-  const isInstructor = user.role === 'instructor';
+  const hasUnseen = totalPending > seenCount && totalPending > 0;
 
-  // Preview: latest 3 pending submissions
-  const previewItems = pendingItems.slice(0, 3);
+  // Preview items
+  const previewItems = isAdmin 
+    ? adminPayouts.slice(0, 3) 
+    : pendingItems.slice(0, 3);
 
-  const goToSubmissions = () => {
+  const goToNotifications = () => {
     setIsNotificationsOpen(false);
-    router.push('/instructor-submissions');
+    if (isAdmin) {
+      router.push('/admin/payouts');
+    } else {
+      router.push('/instructor-submissions');
+    }
   };
 
   return (
@@ -132,11 +160,12 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="Notifications"
             >
               <Icon name="bell" className="w-6 h-6" />
-              {isInstructor && hasUnseen && (
+              {/* 👈 Show red badge if ANY pending items exist (Admin or Instructor) */}
+              {(isInstructor || isAdmin) && hasUnseen && (
                 <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center">
                   <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping"></span>
                   <span className="relative inline-flex rounded-full h-4 min-w-[16px] px-1 items-center justify-center bg-red-500 text-white text-[10px] font-bold">
-                    {pendingCount > 9 ? '9+' : pendingCount}
+                    {totalPending > 9 ? '9+' : totalPending}
                   </span>
                 </span>
               )}
@@ -148,67 +177,69 @@ export const Header: React.FC<HeaderProps> = ({
                   <p className="font-bold text-gray-900 text-sm">
                     Notifications
                   </p>
-                  {isInstructor && pendingCount > 0 && (
+                  {(isInstructor || isAdmin) && totalPending > 0 && (
                     <span className="text-xs text-brand-muted">
-                      {pendingCount} pending
+                      {totalPending} pending
                     </span>
                   )}
                 </div>
 
-                {!isInstructor ? (
+                {!isInstructor && !isAdmin ? (
                   <div className="p-6 text-center text-sm text-gray-500 italic">
                     No notifications.
                   </div>
-                ) : pendingCount === 0 ? (
+                ) : totalPending === 0 ? (
                   <div className="p-6 text-center">
-                    <Icon
-                      name="checkCircle"
-                      className="w-8 h-8 text-green-500 mx-auto mb-2"
-                    />
-                    <p className="text-sm text-gray-700 font-semibold">
-                      You're all caught up
-                    </p>
+                    <Icon name="checkCircle" className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                    <p className="text-sm text-gray-700 font-semibold">You're all caught up</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      No submissions waiting for review.
+                      {isAdmin ? "No pending payouts to review." : "No submissions waiting for review."}
                     </p>
                   </div>
                 ) : (
                   <>
                     <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
-                      {previewItems.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={goToSubmissions}
-                          className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
-                        >
-                          <p className="text-sm text-gray-900">
-                            <span className="font-bold">
-                              {s.student?.full_name ?? 'A student'}
-                            </span>{' '}
-                            submitted{' '}
-                            <span className="font-bold">
-                              {s.project?.title ?? 'a project'}
-                            </span>
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {s.course?.title ?? ''} ·{' '}
-                            {formatRelativeTime(s.submitted_at)}
-                            {s.is_late && (
-                              <span className="text-red-600 font-semibold ml-2">
-                                LATE
-                              </span>
-                            )}
-                          </p>
-                        </button>
-                      ))}
+                      {/* 👈 Render Admin Payouts OR Instructor Submissions */}
+                      {isAdmin ? (
+                        adminPayouts.slice(0, 3).map((payout: any) => (
+                          <button
+                            key={payout.id}
+                            onClick={goToNotifications}
+                            className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                          >
+                            <p className="text-sm text-gray-900">
+                              <span className="font-bold">{payout.instructor?.full_name ?? 'An instructor'}</span> requested a payout
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              ₦{Number(payout.amount).toLocaleString()} · {formatRelativeTime(payout.created_at)}
+                            </p>
+                          </button>
+                        ))
+                      ) : (
+                        pendingItems.slice(0, 3).map((s: any) => (
+                          <button
+                            key={s.id}
+                            onClick={goToNotifications}
+                            className="w-full text-left p-4 hover:bg-gray-50 transition-colors"
+                          >
+                            <p className="text-sm text-gray-900">
+                              <span className="font-bold">{s.student?.full_name ?? 'A student'}</span> submitted <span className="font-bold">{s.project?.title ?? 'a project'}</span>
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {s.course?.title ?? ''} · {formatRelativeTime(s.submitted_at)}
+                              {s.is_late && <span className="text-red-600 font-semibold ml-2">LATE</span>}
+                            </p>
+                          </button>
+                        ))
+                      )}
                     </div>
 
                     <div className="p-3 border-t border-gray-100">
                       <button
-                        onClick={goToSubmissions}
+                        onClick={goToNotifications}
                         className="w-full py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors"
                       >
-                        View all submissions
+                        {isAdmin ? "View all payouts" : "View all submissions"}
                       </button>
                     </div>
                   </>
@@ -226,16 +257,12 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const isInstructorPage =
-                    window.location.pathname.includes('instructor');
-                  window.location.href = isInstructorPage
-                    ? '/student-dashboard'
-                    : '/instructor-dashboard';
+                  const isInstructorPage = window.location.pathname.includes('instructor');
+                  window.location.href = isInstructorPage ? '/student-dashboard' : '/instructor-dashboard';
                 }}
                 className="hidden lg:block mr-4 text-sm font-bold text-[#219BD5] hover:underline"
               >
-                {typeof window !== 'undefined' &&
-                window.location.pathname.includes('instructor')
+                {typeof window !== 'undefined' && window.location.pathname.includes('instructor')
                   ? 'Switch to Student View'
                   : 'Switch to Instructor View'}
               </button>
@@ -250,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <p className="font-semibold text-gray-900 text-sm">
                   {user.name}
                 </p>
-                {user.role === 'admin' && (
+                {(user.role === 'admin' || user.role === 'superadmin') && (
                   <span className="text-xs font-bold text-brand-accent bg-brand-accent/10 px-2 py-0.5 rounded-full">
                     ADMIN
                   </span>

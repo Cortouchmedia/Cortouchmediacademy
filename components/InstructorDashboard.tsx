@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from './Icon';
 import type { Page, Course, User } from '../types';
-import { Api, authStorage } from '../lib/api';
+import { Api, authStorage, ApiRevenue } from '../lib/api'; // 👈 Imported ApiRevenue
 
 interface InstructorDashboardProps {
   user: User;
   courses: Course[];
-  setActivePage: (page: Page) => void;
+  setActivePage: any; 
   onCourseSelect: (course: Course) => void;
 }
 
@@ -29,20 +29,15 @@ function formatRelativeTime(dateStr: string): string {
 export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, courses, setActivePage, onCourseSelect }) => {
   const instructorCourses = courses.filter((c) => c.instructor_id === user.id);
 
-  const totalEnrollments = instructorCourses.reduce(
-    (acc, c) => acc + (c.enrollmentCount || 0),
-    0,
-  );
-  const totalRevenue = instructorCourses.reduce(
-    (acc, c) => acc + ((c.enrollmentCount || 0) * (c.price || 0)),
-    0,
-  );
-  const instructorShare = totalRevenue * 0.3;
-
+  // --- States for Real Data ---
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(true);
   const [uniqueStudentCount, setUniqueStudentCount] = useState(0);
   const [loadingStudents, setLoadingStudents] = useState(true);
+  
+  // 👈 New states for real revenue
+  const [realEarnings, setRealEarnings] = useState(0);
+  const [loadingEarnings, setLoadingEarnings] = useState(true);
 
   // Fetch recent activity
   useEffect(() => {
@@ -65,7 +60,7 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, 
       .finally(() => setLoadingActivity(false));
   }, [user?.id]);
 
-  // Fetch unique student count (matches the Students page)
+  // Fetch unique student count
   useEffect(() => {
     const token = authStorage.getToken();
     if (!token || !user?.id) {
@@ -83,6 +78,26 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, 
         setUniqueStudentCount(0);
       })
       .finally(() => setLoadingStudents(false));
+  }, [user?.id]);
+
+  // 👈 Fetch REAL earnings from backend
+  useEffect(() => {
+    const token = authStorage.getToken();
+    if (!token || !user?.id) {
+      setLoadingEarnings(false);
+      return;
+    }
+
+    ApiRevenue.instructorSummary(user.id, token)
+      .then((data) => {
+        // Use the real available_balance from Supabase
+        setRealEarnings(data.available_balance || 0);
+      })
+      .catch((err) => {
+        console.error('Failed to load real earnings:', err);
+        setRealEarnings(0);
+      })
+      .finally(() => setLoadingEarnings(false));
   }, [user?.id]);
 
   const stats = [
@@ -110,8 +125,9 @@ export const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, 
       bg: 'bg-yellow-100',
     },
     {
-      label: 'Total Revenue (30%)',
-      value: `₦${instructorShare.toLocaleString()}`,
+      label: 'Available Earnings',
+      // 👈 Using the real data here
+      value: loadingEarnings ? '…' : `₦${realEarnings.toLocaleString()}`, 
       icon: 'trendingUp',
       color: 'text-green-600',
       bg: 'bg-green-100',
