@@ -166,19 +166,18 @@ export class ProjectsController {
   @Get("instructor/:instructorId/submissions")
   @UseGuards(SupabaseAuthGuard, InstructorGuard)
   async getInstructorSubmissions(
-    @Param("instructorId") instructorId: string,
+    @Param("instructorId") instructorIdFromUrl: string,
     @CurrentUser() user: AuthUser,
     @Query("status") status?: "pending" | "graded" | "all",
     @Query("courseId") courseId?: string,
   ) {
-    if (
-      user.id !== instructorId &&
-      user.role !== "ADMIN" &&
-      user.role !== "SUPERADMIN"
-    ) {
-      throw new ForbiddenException("You can only view your own submissions");
-    }
-    return this.projectsService.getInstructorSubmissions(instructorId, {
+    const role = (user.role ?? "").toUpperCase();
+    const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+
+
+    const actualInstructorId = isAdmin ? instructorIdFromUrl : user.id;
+
+    return this.projectsService.getInstructorSubmissions(actualInstructorId, {
       status,
       courseId,
     });
