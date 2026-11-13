@@ -290,41 +290,44 @@ export class RevenueService {
   async requestPayout(requestDto: RequestPayoutDto) {
     const supabase = this.getSupabaseClient();
 
-    // Check available balance
-    const summary = await this.getEarningsSummary(requestDto.instructor_id);
 
-    if (summary.available_balance < requestDto.amount) {
+    const amount = Number(requestDto.amount);
+    if (!amount || isNaN(amount) || amount <= 0) {
+      throw new BadRequestException("Invalid payout amount provided.");
+    }
+
+   
+    const summary = await this.getEarningsSummary(requestDto.instructor_id);
+    if (summary.available_balance < amount) {
       throw new BadRequestException("Insufficient available balance");
     }
 
-    // Check minimum payout amount
+   
     const settings = await this.getPayoutSettings(requestDto.instructor_id);
-    const minAmount = settings?.minimum_payout_amount || 10000; // Default NGN 10,000
+    const minAmount = settings?.minimum_payout_amount || 10000;
 
-    if (requestDto.amount < minAmount) {
+    if (amount < minAmount) {
       throw new BadRequestException(`Minimum payout amount is ${minAmount}`);
     }
 
-    // Generate unique reference
+
     const reference = `PO-${Date.now()}-${randomBytes(6).toString("hex")}`;
 
-    // Calculate fee (e.g., 1.5% processing fee)
-    const fee = requestDto.amount * 0.015;
-    const netAmount = requestDto.amount - fee;
+    const fee = amount * 0.015;
+    const netAmount = amount - fee;
 
-    // Create payout request
     const { data: payout, error } = await supabase
       .from("instructor_payouts")
       .insert({
         instructor_id: requestDto.instructor_id,
-        amount: requestDto.amount,
+        amount: amount, 
         fee: fee,
         net_amount: netAmount,
         payment_method: requestDto.payment_method || "bank_transfer",
         reference: reference,
-        bank_name: settings?.bank_name,
-        account_number: settings?.account_number,
-        account_name: settings?.account_name,
+        bank_name: settings?.bank_name || "Not provided",
+        account_number: settings?.account_number || "Not provided",
+        account_name: settings?.account_name || "Not provided",
         status: "pending",
         notes: requestDto.notes,
         metadata: {
@@ -340,11 +343,10 @@ export class RevenueService {
         `Failed to create payout request: ${error.message}`,
       );
     }
-
-    // Mark earnings as pending payout
+    
     await this.markEarningsForPayout(
       requestDto.instructor_id,
-      requestDto.amount,
+      amount,
       payout.id,
     );
 
