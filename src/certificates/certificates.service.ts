@@ -95,17 +95,8 @@ export class CertificatesService {
       throw new NotFoundException("Invalid certificate verification code");
     }
 
-    return {
-      valid: true,
-      verified_at: new Date(),
-      certificate: {
-        number: data.certificate_number,
-        issue_date: data.issue_date,
-        user_name: data.user?.full_name,
-        course_title: data.course?.title,
-        verification_code: data.verification_code,
-      },
-    };
+    // 👈 Return the FULL data object, not a truncated subset
+    return data;
   }
 
   async generateManualCertificate(
