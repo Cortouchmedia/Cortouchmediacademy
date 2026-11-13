@@ -5,12 +5,16 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
+import { MailService } from "../mail/mail.service"; // 👈 Import
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly mailService: MailService, // 👈 Inject
+  ) {}
 
   // 👈 Helper function to save audit logs to Supabase
   private async saveAuditLog(
@@ -130,6 +134,9 @@ export class AuthService {
           "user",
           `${full_name} (${email}) created an account as ${role}.`,
         );
+
+        // 👈 Send the welcome email
+        await this.mailService.sendWelcomeEmail(email, full_name);
       }
 
       return {
