@@ -286,12 +286,8 @@ export class RevenueService {
       settings: data,
     };
   }
-
   async requestPayout(requestDto: RequestPayoutDto) {
     const supabase = this.getSupabaseClient();
-
-    // 👈 LOG 1: See exactly what arrived from the frontend
-    console.log("=== [1] RECEIVED DTO ===", requestDto);
 
     const amount = Number(requestDto.amount);
     if (!amount || isNaN(amount) || amount <= 0) {
@@ -299,30 +295,34 @@ export class RevenueService {
     }
 
     const summary = await this.getEarningsSummary(requestDto.instructor_id);
-    
-    // 👈 LOG 2: See the backend calculated balance
-    console.log("=== [2] SUMMARY ===", summary);
-
     if (summary.available_balance < amount) {
       throw new BadRequestException("Insufficient available balance");
     }
 
     const settings = await this.getPayoutSettings(requestDto.instructor_id);
-    
-    // 👈 Fallback changed to 5000
     const minAmount = settings?.minimum_payout_amount || 5000;
-
-    // 👈 LOG 3: See the minimum amount requirement
-    console.log("=== [3] MIN AMOUNT ===", minAmount);
 
     if (amount < minAmount) {
       throw new BadRequestException(`Minimum payout amount is ${minAmount}`);
     }
 
     const reference = `PO-${Date.now()}-${randomBytes(6).toString("hex")}`;
-
     const fee = amount * 0.015;
     const netAmount = amount - fee;
+
+    // 👈 Parse the notes string to get bank details if settings are empty
+    let bankName = settings?.bank_name;
+    let accountNumber = settings?.account_number;
+    let accountName = settings?.account_name;
+
+    if (!bankName && requestDto.notes) {
+      const match = requestDto.notes.match(/Bank:\s*(.*?),\s*Acct:\s*(.*?),\s*Name:\s*(.*)/i);
+      if (match) {
+        bankName = match[1];
+        accountNumber = match[2];
+        accountName = match[3];
+      }
+    }
 
     const { data: payout, error } = await supabase
       .from("instructor_payouts")
@@ -333,9 +333,9 @@ export class RevenueService {
         net_amount: netAmount,
         payment_method: requestDto.payment_method || "bank_transfer",
         reference: reference,
-        bank_name: settings?.bank_name || "Not provided",
-        account_number: settings?.account_number || "Not provided",
-        account_name: settings?.account_name || "Not provided",
+        bank_name: bankName || "Not provided",
+        account_number: accountNumber || "Not provided",
+        account_name: accountName || "Not provided",
         status: "pending",
         notes: requestDto.notes,
         metadata: {
@@ -364,7 +364,7 @@ export class RevenueService {
       payout,
     };
   }
-
+  
   private async markEarningsForPayout(
     instructorId: string,
     amount: number,
