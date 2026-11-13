@@ -218,7 +218,7 @@ export class UsersService {
         }
       });
   
-      // 4. Merge the count into each profile
+  
       return profiles.map((p: any) => ({
         ...p,
         enrollment_count: countByUser.get(p.id) ?? 0,

@@ -128,9 +128,9 @@ export class RevenueController {
     @Body() requestDto: RequestPayoutDto,
     @CurrentUser() user: AuthUser,
   ) {
-    if (user.id !== requestDto.instructor_id) {
-      throw new ForbiddenException("You can only request your own payout");
-    }
+
+    requestDto.instructor_id = user.id; 
+    
     return this.revenueService.requestPayout(requestDto);
   }
 
