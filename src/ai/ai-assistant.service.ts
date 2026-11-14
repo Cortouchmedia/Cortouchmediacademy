@@ -41,18 +41,25 @@ export class AiAssistantService implements OnModuleInit {
       const courseContent = await this.getCourseContent(course_id);
       const userProgress = await this.getUserProgress(user_id, course_id);
 
+      // 👈 THE MAGIC IS IN THIS PROMPT
       const prompt = `
-        You are a helpful tutor for Cortouch Media Academy.
+        You are a helpful, professional tutor for Cortouch Media Academy.
         Answer the student's question based on the course content below.
-        
+
+        FORMATTING RULES (CRITICAL):
+        1. Do NOT use H1, H2, or H3 headers (no ###).
+        2. Do NOT use horizontal lines (no ---).
+        3. Use **bold** text for emphasis instead of headers.
+        4. Use bullet points (-) for lists.
+        5. Keep paragraphs short (2-3 sentences max).
+        6. Be direct and conversational.
+
         Course Content:
         ${courseContent}
         
         Student Progress: ${userProgress}
         
         Student Question: ${question}
-        
-        Provide a clear, helpful, and concise answer.
       `;
 
       const response = await this.callGeminiAPI(prompt);
@@ -138,6 +145,12 @@ export class AiAssistantService implements OnModuleInit {
         2. Key points to understand (3-5 bullet points)
         3. A practical example
         4. Common misconceptions to avoid
+
+        FORMATTING RULES:
+        - Do NOT use H1, H2, or H3 headers (no ###).
+        - Do NOT use horizontal lines (no ---).
+        - Use **bold** text for emphasis.
+        - Use bullet points (-) for lists.
       `;
 
       const response = await this.callGeminiAPI(prompt);
@@ -172,6 +185,12 @@ export class AiAssistantService implements OnModuleInit {
         2. Key takeaways (bullet points)
         3. Important concepts covered
         4. Recommended next steps for students
+
+        FORMATTING RULES:
+        - Do NOT use H1, H2, or H3 headers (no ###).
+        - Do NOT use horizontal lines (no ---).
+        - Use **bold** text for emphasis.
+        - Use bullet points (-) for lists.
       `;
 
       const response = await this.callGeminiAPI(prompt);

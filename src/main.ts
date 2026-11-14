@@ -9,8 +9,8 @@ async function bootstrap() {
     origin: [
       'http://localhost:3000',       
       'http://localhost:5173',       
-      'https://cortouchacedemy.com', 
-      'https://cortouchmediacademy.vercel.app',
+      'https://cortouchacademy.com', 
+      'https://cortouchmediacademy.vercel.app', 
       /\.railway\.app$/,
   /\.vercel\.app$/,            
     ],
