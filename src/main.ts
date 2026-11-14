@@ -7,17 +7,19 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
-      'http://localhost:3000',       
-      'http://localhost:5173',       
-      'https://cortouchacademy.com', 
-      'https://cortouchmediacademy.vercel.app', 
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://cortouch.tech',
+      'https://www.cortouch.tech',
+      'https://cortouchacademy.com',
+      'https://cortouchmediacademy.vercel.app',
       /\.railway\.app$/,
-  /\.vercel\.app$/,            
+      /\.vercel\.app$/,
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'], // 👈 CRITICAL FIX
   });
-
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -27,10 +29,8 @@ async function bootstrap() {
     }),
   );
 
-
   app.enableShutdownHooks();
 
- 
   const port = process.env.PORT ?? 3001;
   await app.listen(port, '0.0.0.0');
 
