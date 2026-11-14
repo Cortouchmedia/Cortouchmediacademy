@@ -41,18 +41,18 @@ export class AiAssistantService implements OnModuleInit {
       const courseContent = await this.getCourseContent(course_id);
       const userProgress = await this.getUserProgress(user_id, course_id);
 
-      // 👈 THE MAGIC IS IN THIS PROMPT
+      // 👈 FIXED: HTML tags instead of Markdown
       const prompt = `
         You are a helpful, professional tutor for Cortouch Media Academy.
         Answer the student's question based on the course content below.
 
-        FORMATTING RULES (CRITICAL):
-        1. Do NOT use H1, H2, or H3 headers (no ###).
-        2. Do NOT use horizontal lines (no ---).
-        3. Use **bold** text for emphasis instead of headers.
-        4. Use bullet points (-) for lists.
-        5. Keep paragraphs short (2-3 sentences max).
-        6. Be direct and conversational.
+        FORMATTING RULES (CRITICAL - FOLLOW EXACTLY):
+        1. NEVER use Markdown asterisks (**). 
+        2. To make text bold, use HTML tags: <b>text</b>.
+        3. Do NOT use H1, H2, or H3 headers (no ###).
+        4. Do NOT use horizontal lines (no ---).
+        5. Use bullet points (-) for lists.
+        6. Keep paragraphs short (2-3 sentences max).
 
         Course Content:
         ${courseContent}
@@ -134,6 +134,7 @@ export class AiAssistantService implements OnModuleInit {
     try {
       const courseContent = await this.getCourseContent(course_id);
 
+      // 👈 FIXED: HTML tags instead of Markdown
       const prompt = `
         Explain the concept "${concept}" at a ${level} level.
         
@@ -146,10 +147,11 @@ export class AiAssistantService implements OnModuleInit {
         3. A practical example
         4. Common misconceptions to avoid
 
-        FORMATTING RULES:
+        FORMATTING RULES (CRITICAL):
+        - NEVER use Markdown asterisks (**).
+        - To make text bold, use HTML tags: <b>text</b>.
         - Do NOT use H1, H2, or H3 headers (no ###).
         - Do NOT use horizontal lines (no ---).
-        - Use **bold** text for emphasis.
         - Use bullet points (-) for lists.
       `;
 
@@ -175,6 +177,7 @@ export class AiAssistantService implements OnModuleInit {
     try {
       const courseContent = await this.getCourseContent(course_id);
 
+      // 👈 FIXED: HTML tags instead of Markdown
       const prompt = `
         Create a comprehensive summary of this course:
         
@@ -186,10 +189,11 @@ export class AiAssistantService implements OnModuleInit {
         3. Important concepts covered
         4. Recommended next steps for students
 
-        FORMATTING RULES:
+        FORMATTING RULES (CRITICAL):
+        - NEVER use Markdown asterisks (**).
+        - To make text bold, use HTML tags: <b>text</b>.
         - Do NOT use H1, H2, or H3 headers (no ###).
         - Do NOT use horizontal lines (no ---).
-        - Use **bold** text for emphasis.
         - Use bullet points (-) for lists.
       `;
 
