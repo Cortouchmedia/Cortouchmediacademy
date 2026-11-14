@@ -28,6 +28,10 @@ export class AiAssistantService implements OnModuleInit {
     this.logger.log("AI Assistant initialized");
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // PUBLIC METHODS
+  // ─────────────────────────────────────────────────────────────
+
   async askQuestion(askQuestionDto: any) {
     const { question, course_id, user_id } = askQuestionDto;
 
@@ -38,7 +42,8 @@ export class AiAssistantService implements OnModuleInit {
       const userProgress = await this.getUserProgress(user_id, course_id);
 
       const prompt = `
-        You are a helpful tutor. Answer the student's question based on the course content.
+        You are a helpful tutor for Cortouch Media Academy.
+        Answer the student's question based on the course content below.
         
         Course Content:
         ${courseContent}
@@ -354,9 +359,10 @@ ${input.studentDescription}
       }
     }
 
+    // ✅ FIXED: Only valid Gemini models
     const modelNames = [
-      "models/gemini-3.8-flash",        
-      "models/gemini-flash-latest",   
+      "models/gemini-3.8-flash",
+      "models/gemini-3.6-flash",
     ];
 
     let lastError: Error | null = null;
@@ -394,48 +400,48 @@ ${input.studentDescription}
           continue;
         }
 
-                // 1. Strip markdown fences if present
-                let cleanText = text.trim();
-                if (cleanText.startsWith("```")) {
-                  cleanText = cleanText
-                    .replace(/^```(?:json)?\s*/i, "")
-                    .replace(/\s*```\s*$/, "")
-                    .trim();
-                }
-        
-                // 2. Try strict parse first, then fall back to regex extraction
-                let parsed: any = null;
-                try {
-                  parsed = JSON.parse(cleanText);
-                } catch {
-                  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-                  if (jsonMatch) {
-                    try {
-                      parsed = JSON.parse(jsonMatch[0]);
-                    } catch (innerErr: any) {
-                      this.logger.warn(
-                        `JSON regex fallback also failed: ${innerErr.message}`,
-                      );
-                    }
-                  }
-                }
-        
-                // 3. If we still don't have valid JSON, log the raw response for debugging
-                if (!parsed || typeof parsed !== "object") {
-                  this.logger.warn(
-                    `Model returned non-JSON output (length ${text.length}). First 500 chars: ${text.substring(0, 500)}`,
-                  );
-                  lastError = new Error("Model returned non-JSON output");
-                  continue;
-                }
-        
-                return {
-                  score: Math.max(0, Math.min(points, Number(parsed.score) || 0)),
-                  feedback: String(parsed.feedback || "No feedback provided."),
-                  rubric_breakdown: Array.isArray(parsed.rubric_breakdown)
-                    ? parsed.rubric_breakdown
-                    : [],
-                };
+        // 1. Strip markdown fences if present
+        let cleanText = text.trim();
+        if (cleanText.startsWith("```")) {
+          cleanText = cleanText
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/\s*```\s*$/, "")
+            .trim();
+        }
+
+        // 2. Try strict parse first, then fall back to regex extraction
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(cleanText);
+        } catch {
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              parsed = JSON.parse(jsonMatch[0]);
+            } catch (innerErr: any) {
+              this.logger.warn(
+                `JSON regex fallback also failed: ${innerErr.message}`,
+              );
+            }
+          }
+        }
+
+        // 3. If we still don't have valid JSON, log the raw response for debugging
+        if (!parsed || typeof parsed !== "object") {
+          this.logger.warn(
+            `Model returned non-JSON output (length ${text.length}). First 500 chars: ${text.substring(0, 500)}`,
+          );
+          lastError = new Error("Model returned non-JSON output");
+          continue;
+        }
+
+        return {
+          score: Math.max(0, Math.min(points, Number(parsed.score) || 0)),
+          feedback: String(parsed.feedback || "No feedback provided."),
+          rubric_breakdown: Array.isArray(parsed.rubric_breakdown)
+            ? parsed.rubric_breakdown
+            : [],
+        };
       } catch (err: any) {
         this.logger.warn(`Grade error with ${modelName}: ${err.message}`);
         lastError = err;
@@ -445,13 +451,15 @@ ${input.studentDescription}
     throw lastError || new Error("AI grading failed for all models");
   }
 
-  // ==================== HELPER METHODS ====================
+  // ─────────────────────────────────────────────────────────────
+  // HELPER METHODS
+  // ─────────────────────────────────────────────────────────────
 
   private async callGeminiAPI(prompt: string): Promise<string> {
-    // Try different model names (order by preference)
+    // ✅ FIXED: Only valid Gemini models
     const modelNames = [
-      "models/gemini-3.8-flash",        // current generation
-      "models/gemini-flash-latest",     // fallback alias
+      "models/gemini-3.8-flash",
+      "models/gemini-3.6-flash",
     ];
 
     let lastError: Error | null = null;
@@ -514,6 +522,10 @@ ${input.studentDescription}
   private async getCourseContent(courseId: string): Promise<string> {
     const supabase = this.supabaseService.getAdminClient();
 
+    if (!courseId) {
+      return "No specific course context — the student is asking a general question.";
+    }
+
     const { data: course } = await supabase
       .from("courses")
       .select("title, description")
@@ -548,6 +560,10 @@ ${input.studentDescription}
     userId: string,
     courseId: string,
   ): Promise<string> {
+    if (!userId || !courseId) {
+      return "No progress data available.";
+    }
+
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: progress } = await supabase
