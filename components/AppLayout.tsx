@@ -19,7 +19,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     isLoggedIn, currentUser, currentPage, selectedCourse, editingCourse, completedCourse,
     isChatOpen, isBotTyping, messages, searchQuery,
     handleLogout, handleNavigate, handleSearchChange,
-    setIsChatOpen, setCompletedCourse, courses
+    setIsChatOpen, setCompletedCourse, courses,
+    handleSendMessage,
   } = useAppContext();
 
   const pathname = usePathname();
@@ -159,7 +160,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               isOpen={isChatOpen}
               onToggle={() => setIsChatOpen(!isChatOpen)}
               messages={messages}
-              onSendMessage={() => {}}
+              onSendMessage={handleSendMessage}
               isBotTyping={isBotTyping}
             />
           )}

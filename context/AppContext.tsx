@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useMemo, useEffect, useCallback } from 'react';
-import { GoogleGenAI } from '@google/genai';
 import type { Page, Course, User, ChatMessage, CourseWithEnrollment, AuditLog, PayoutRequest, InstructorMessage, Lesson, Webinar } from '../types';
 import { Api, authStorage, api, ApiAdmin } from '../lib/api';
 
@@ -107,9 +106,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const ai = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY })
-  : null;
+
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -753,7 +750,6 @@ useEffect(() => {
   };
 
  
-
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: Date.now(),
@@ -761,30 +757,53 @@ useEffect(() => {
       sender: 'user',
       timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()),
     };
+    
     setMessages((prev) => [...prev, userMsg]);
     setIsBotTyping(true);
+
     try {
-      let responseText = "I'm having trouble connecting right now.";
-      if (ai) {
-        const result = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: text });
-        responseText = result.text || "I couldn't generate a response.";
-      } else {
-        responseText = "I'm here to help! Could you tell me more?";
-      }
+      // Use the Api helper so it respects .env.local
+      const res: any = await Api.ai.ask({
+        question: text,
+        user_id: currentUser?.id,
+      });
+
+      let responseText = res?.answer ?? "I couldn't generate a response.";
+
+      // 🧹 Strip all HTML and Markdown symbols
+      responseText = responseText
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/?[^>]+(>|$)/g, "")
+        .replace(/\*\*/g, "")
+        .replace(/###/g, "")
+        .replace(/---/g, "")
+        .trim();
+
       setMessages((prev) => [
         ...prev,
-        { id: Date.now() + 1, text: responseText, sender: 'bot', timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) },
+        { 
+          id: Date.now() + 1, 
+          text: responseText, 
+          sender: 'bot', 
+          timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) 
+        },
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Error:', error);
       setMessages((prev) => [
         ...prev,
-        { id: Date.now() + 2, text: 'I hit an error. Try again.', sender: 'bot', timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) },
+        { 
+          id: Date.now() + 2, 
+          text: error?.message || 'I hit an error connecting to the AI service. Please try again.', 
+          sender: 'bot', 
+          timestamp: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date()) 
+        },
       ]);
     } finally {
       setIsBotTyping(false);
     }
   };
+
 
   const handleSendCourseMessage = async (
     courseId: number | string,

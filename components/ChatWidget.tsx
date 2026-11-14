@@ -1,21 +1,23 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { ChatMessage } from '../types';
 import { Icon } from './Icon';
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
 
 interface ChatWidgetProps {
   isOpen: boolean;
   onToggle: () => void;
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
-  // FIX: Add isBotTyping prop to show a typing indicator.
   isBotTyping?: boolean;
 }
 
+
 const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
   const isUser = message.sender === 'user';
+  
   return (
     <div className={`flex items-end gap-2 ${isUser ? 'justify-end' : ''}`}>
       {!isUser && (
@@ -23,15 +25,25 @@ const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
           <Icon name="courses" className="w-5 h-5 text-white" />
         </div>
       )}
+      
       <div
-        className={`max-w-xs md:max-w-md rounded-2xl p-3 shadow-sm ${
+        className={`max-w-[90%] rounded-2xl p-4 shadow-sm ${
           isUser
             ? 'bg-brand-primary text-white rounded-br-none'
-            : 'bg-gray-200 text-gray-800 rounded-bl-none'
+            : 'bg-white text-gray-800 rounded-bl-none border border-gray-200'
         }`}
       >
-        <p className="text-sm">{message.text}</p>
-        <p className={`text-xs mt-1 opacity-60 ${isUser ? 'text-right' : 'text-left'}`}>{message.timestamp}</p>
+        {/* 
+          👈 whitespace-pre-wrap preserves newlines (\n) from our <br> replacement.
+          No ReactMarkdown, no HTML tags, no asterisks — just clean text.
+        */}
+        <p className="text-[13.5px] leading-relaxed break-words whitespace-pre-wrap">
+          {message.text}
+        </p>
+        
+        <p className={`text-[10px] mt-2 font-medium ${isUser ? 'text-white/80 text-right' : 'text-gray-400 text-left'}`}>
+          {message.timestamp}
+        </p>
       </div>
     </div>
   );
@@ -49,10 +61,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onToggle, messag
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
-      onSendMessage(inputValue);
-      setInputValue('');
-    }
+    
+    const trimmed = inputValue.trim();
+    if (!trimmed) return;
+
+    console.log('📤 [ChatWidget] Form submitted with:', trimmed);
+
+    // 1. Call the parent function
+    onSendMessage(trimmed);
+    
+    // 2. Clear the input
+    setInputValue('');
   };
 
   return (
@@ -75,7 +94,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onToggle, messag
                     <Icon name="courses" className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <h3 className="font-bold text-gray-900">Live Support</h3>
+                    <h3 className="font-bold text-gray-900">Virtual Assistant</h3>
                     <p className="text-xs text-brand-accent">Online</p>
                 </div>
             </div>
@@ -89,7 +108,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ isOpen, onToggle, messag
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
-          {/* FIX: Add a typing indicator for when the bot is generating a response. */}
+          
+          {/* Typing Indicator */}
           {isBotTyping && (
              <div className="flex items-end gap-2">
                 <div className="w-8 h-8 rounded-full bg-brand-primary flex items-center justify-center flex-shrink-0">
