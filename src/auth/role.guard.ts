@@ -19,7 +19,7 @@ export class RoleGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
 
-    const userId = req.user?.id;
+    const userId = req.user?.id || req.user?.sub || req.user?.userId;
     if (!userId) {
       throw new UnauthorizedException(
         "RoleGuard must be used together with SupabaseAuthGuard",

@@ -11,7 +11,7 @@ import { MailService } from "../mail/mail.service";
   imports: [
     ConfigModule,
     SupabaseModule,
-    PassportModule.register({ defaultStrategy: 'jwt' }), 
+    PassportModule.register({ session: true }),
   ],
   providers: [
     AuthService,
