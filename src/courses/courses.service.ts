@@ -7,6 +7,17 @@ import {
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
 import { CertificatesService } from "../certificates/certificates.service";
+import { CloudinaryService } from "../cloudinary/cloudinary.service";
+import { v4 as uuidv4 } from "uuid";
+
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
 
 @Injectable()
 export class CoursesService {
@@ -15,6 +26,7 @@ export class CoursesService {
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly certificatesService: CertificatesService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   // ==================== COURSE MANAGEMENT ====================
@@ -27,7 +39,6 @@ export class CoursesService {
       .insert({
         ...createCourseDto,
         instructor_id: instructorId,
-        // 👈 Force to draft upon creation so it needs approval
         status: createCourseDto.status || "DRAFT",
         is_published: false,
         created_at: new Date(),
@@ -50,10 +61,10 @@ export class CoursesService {
     category?: string;
     level?: string;
     search?: string;
-    includeDrafts?: boolean; // 👈 Added this
+    includeDrafts?: boolean;
   }) {
     const supabase = this.supabaseService.getAdminClient();
-  
+
     let query = supabase
       .from("courses")
       .select(
@@ -62,12 +73,11 @@ export class CoursesService {
         instructor:instructor_id(id, full_name, email)
       `,
       );
-  
-    // 👈 Only filter by PUBLISHED if drafts are NOT requested
+
     if (!filters?.includeDrafts) {
       query = query.eq("status", "PUBLISHED");
     }
-  
+
     if (filters?.category) {
       query = query.eq("category", filters.category);
     }
@@ -77,22 +87,22 @@ export class CoursesService {
     if (filters?.search) {
       query = query.ilike("title", `%${filters.search}%`);
     }
-  
+
     const { data: courses, error } = await query.order("created_at", {
       ascending: false,
     });
-  
+
     if (error) {
       this.logger.error(`Failed to fetch courses: ${error.message}`);
       throw new BadRequestException(
         `Failed to fetch courses: ${error.message}`,
       );
     }
-  
+
     if (!courses || courses.length === 0) return [];
-  
+
     const courseIds = courses.map((c: any) => c.id);
-  
+
     const { data: modules, error: modulesError } = await supabase
       .from("course_modules")
       .select(
@@ -103,14 +113,14 @@ export class CoursesService {
       )
       .in("course_id", courseIds)
       .order("order_number", { ascending: true });
-  
+
     if (modulesError) {
       this.logger.error(`Failed to fetch modules: ${modulesError.message}`);
       throw new BadRequestException(
         `Failed to fetch modules: ${modulesError.message}`,
       );
     }
-  
+
     const modulesByCourse = new Map<string, any[]>();
     (modules || []).forEach((m: any) => {
       if (!modulesByCourse.has(m.course_id)) {
@@ -118,12 +128,12 @@ export class CoursesService {
       }
       modulesByCourse.get(m.course_id)!.push(m);
     });
-  
+
     const { data: enrollments } = await supabase
       .from("course_enrollments")
       .select("course_id")
       .in("course_id", courseIds);
-  
+
     const enrollmentCountByCourse = new Map<string, number>();
     (enrollments || []).forEach((e: any) => {
       enrollmentCountByCourse.set(
@@ -131,12 +141,12 @@ export class CoursesService {
         (enrollmentCountByCourse.get(e.course_id) ?? 0) + 1,
       );
     });
-  
+
     const { data: reviews } = await supabase
       .from("course_reviews")
       .select("course_id, rating")
       .in("course_id", courseIds);
-  
+
     const ratingSumByCourse = new Map<string, number>();
     const ratingCountByCourse = new Map<string, number>();
     (reviews || []).forEach((r: any) => {
@@ -149,12 +159,12 @@ export class CoursesService {
         (ratingCountByCourse.get(r.course_id) ?? 0) + 1,
       );
     });
-  
+
     const { data: allProjects } = await supabase
       .from("projects")
       .select("*")
       .in("course_id", courseIds);
-  
+
     const projectsByCourse = new Map<string, any[]>();
     (allProjects || []).forEach((p: any) => {
       if (!projectsByCourse.has(p.course_id)) {
@@ -162,7 +172,7 @@ export class CoursesService {
       }
       projectsByCourse.get(p.course_id)!.push(p);
     });
-  
+
     return courses.map((c: any) => {
       const count = ratingCountByCourse.get(c.id) ?? 0;
       const sum = ratingSumByCourse.get(c.id) ?? 0;
@@ -258,22 +268,20 @@ export class CoursesService {
     isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
-  
-    // Admins can edit any course — they only need the course to exist.
-    // Instructors can only edit their own courses.
+
     let query = supabase.from("courses").select("id").eq("id", courseId);
     if (!isAdmin) {
       query = query.eq("instructor_id", instructorId);
     }
-  
+
     const { data: existingCourse, error: findError } = await query.single();
-  
+
     if (findError || !existingCourse) {
       throw new NotFoundException(
         "Course not found or you do not have permission",
       );
     }
-  
+
     const { data, error } = await supabase
       .from("courses")
       .update({
@@ -284,58 +292,63 @@ export class CoursesService {
       .eq("id", courseId)
       .select()
       .single();
-  
+
     if (error) {
       this.logger.error(`Failed to update course: ${error.message}`);
       throw new BadRequestException(
         `Failed to update course: ${error.message}`,
       );
     }
-  
+
     return data;
   }
 
   async approveCourse(courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
-    
+
     this.logger.log(`Attempting to approve course: ${courseId}`);
 
-    // Force the update
     const { data, error } = await supabase
       .from("courses")
-      .update({ 
-        is_published: true, 
-        status: 'PUBLISHED',
-        published_at: new Date().toISOString()
+      .update({
+        is_published: true,
+        status: "PUBLISHED",
+        published_at: new Date().toISOString(),
       })
       .eq("id", courseId)
-      .select(); // Note: Removed .single() so we can check array length
+      .select();
 
     if (error) {
       this.logger.error(`Failed to approve course: ${error.message}`);
-      throw new BadRequestException(`Failed to approve course: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to approve course: ${error.message}`,
+      );
     }
 
     if (!data || data.length === 0) {
-      this.logger.error(`Course not found or update blocked by RLS for ID: ${courseId}`);
-      throw new BadRequestException("Course not found or database refused update.");
+      this.logger.error(
+        `Course not found or update blocked by RLS for ID: ${courseId}`,
+      );
+      throw new BadRequestException(
+        "Course not found or database refused update.",
+      );
     }
 
-    this.logger.log(`Successfully approved course: ${data[0].title} (${data[0].id})`);
-    
+    this.logger.log(
+      `Successfully approved course: ${data[0].title} (${data[0].id})`,
+    );
+
     return { message: "Course approved successfully", course: data[0] };
   }
-
-
 
   async rejectCourse(courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data, error } = await supabase
       .from("courses")
-      .update({ 
-        is_published: false, 
-        status: 'DRAFT' 
+      .update({
+        is_published: false,
+        status: "DRAFT",
       })
       .eq("id", courseId)
       .select()
@@ -343,7 +356,9 @@ export class CoursesService {
 
     if (error) {
       this.logger.error(`Failed to reject course: ${error.message}`);
-      throw new BadRequestException(`Failed to reject course: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to reject course: ${error.message}`,
+      );
     }
 
     return { message: "Course set to draft", course: data };
@@ -368,81 +383,81 @@ export class CoursesService {
     return { message: "Course deleted successfully" };
   }
 
- async getInstructorCourses(instructorId: string) {
-  const supabase = this.supabaseService.getAdminClient();
+  async getInstructorCourses(instructorId: string) {
+    const supabase = this.supabaseService.getAdminClient();
 
-  const { data: courses, error } = await supabase
-    .from("courses")
-    .select("*")
-    .eq("instructor_id", instructorId)
-    .order("created_at", { ascending: false });
+    const { data: courses, error } = await supabase
+      .from("courses")
+      .select("*")
+      .eq("instructor_id", instructorId)
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    this.logger.error(`Failed to fetch instructor courses: ${error.message}`);
-    throw new BadRequestException(
-      `Failed to fetch instructor courses: ${error.message}`,
-    );
-  }
-
-  if (!courses || courses.length === 0) return [];
-
-  const courseIds = courses.map((c) => c.id);
-
-  const { data: enrollments } = await supabase
-    .from("course_enrollments")
-    .select("course_id")
-    .in("course_id", courseIds);
-
-  const enrollmentCountByCourse = new Map<string, number>();
-  (enrollments || []).forEach((e: any) => {
-    enrollmentCountByCourse.set(
-      e.course_id,
-      (enrollmentCountByCourse.get(e.course_id) ?? 0) + 1,
-    );
-  });
-
-  const { data: reviews } = await supabase
-    .from("course_reviews")
-    .select("course_id, rating")
-    .in("course_id", courseIds);
-
-  const ratingSumByCourse = new Map<string, number>();
-  const ratingCountByCourse = new Map<string, number>();
-  (reviews || []).forEach((r: any) => {
-    ratingSumByCourse.set(
-      r.course_id,
-      (ratingSumByCourse.get(r.course_id) ?? 0) + Number(r.rating || 0),
-    );
-    ratingCountByCourse.set(
-      r.course_id,
-      (ratingCountByCourse.get(r.course_id) ?? 0) + 1,
-    );
-  });
-
-  const { data: allProjects } = await supabase
-    .from("projects")
-    .select("*")
-    .in("course_id", courseIds);
-
-  const projectsByCourse = new Map<string, any[]>();
-  (allProjects || []).forEach((p: any) => {
-    if (!projectsByCourse.has(p.course_id)) {
-      projectsByCourse.set(p.course_id, []);
+    if (error) {
+      this.logger.error(`Failed to fetch instructor courses: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to fetch instructor courses: ${error.message}`,
+      );
     }
-    projectsByCourse.get(p.course_id)!.push(p);
-  });
 
-  return courses.map((c: any) => {
-    const count = ratingCountByCourse.get(c.id) ?? 0;
-    const sum = ratingSumByCourse.get(c.id) ?? 0;
-    return {
-      ...c,
-      projects: projectsByCourse.get(c.id) ?? [],
-      enrollment_count: enrollmentCountByCourse.get(c.id) ?? 0,
-      average_rating: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
-    };
-  });
-}
+    if (!courses || courses.length === 0) return [];
+
+    const courseIds = courses.map((c) => c.id);
+
+    const { data: enrollments } = await supabase
+      .from("course_enrollments")
+      .select("course_id")
+      .in("course_id", courseIds);
+
+    const enrollmentCountByCourse = new Map<string, number>();
+    (enrollments || []).forEach((e: any) => {
+      enrollmentCountByCourse.set(
+        e.course_id,
+        (enrollmentCountByCourse.get(e.course_id) ?? 0) + 1,
+      );
+    });
+
+    const { data: reviews } = await supabase
+      .from("course_reviews")
+      .select("course_id, rating")
+      .in("course_id", courseIds);
+
+    const ratingSumByCourse = new Map<string, number>();
+    const ratingCountByCourse = new Map<string, number>();
+    (reviews || []).forEach((r: any) => {
+      ratingSumByCourse.set(
+        r.course_id,
+        (ratingSumByCourse.get(r.course_id) ?? 0) + Number(r.rating || 0),
+      );
+      ratingCountByCourse.set(
+        r.course_id,
+        (ratingCountByCourse.get(r.course_id) ?? 0) + 1,
+      );
+    });
+
+    const { data: allProjects } = await supabase
+      .from("projects")
+      .select("*")
+      .in("course_id", courseIds);
+
+    const projectsByCourse = new Map<string, any[]>();
+    (allProjects || []).forEach((p: any) => {
+      if (!projectsByCourse.has(p.course_id)) {
+        projectsByCourse.set(p.course_id, []);
+      }
+      projectsByCourse.get(p.course_id)!.push(p);
+    });
+
+    return courses.map((c: any) => {
+      const count = ratingCountByCourse.get(c.id) ?? 0;
+      const sum = ratingSumByCourse.get(c.id) ?? 0;
+      return {
+        ...c,
+        projects: projectsByCourse.get(c.id) ?? [],
+        enrollment_count: enrollmentCountByCourse.get(c.id) ?? 0,
+        average_rating: count > 0 ? Math.round((sum / count) * 10) / 10 : 0,
+      };
+    });
+  }
 
   // ==================== MODULE MANAGEMENT ====================
 
@@ -565,12 +580,49 @@ export class CoursesService {
     return { message: "Module deleted successfully" };
   }
 
+  // ==================== ATTACHMENT HELPERS ====================
+
+  /**
+   * Uploads a set of files to Cloudinary under a course/lesson folder.
+   * Returns attachment metadata in the same shape used by ProjectsService.
+   */
+  private async uploadLessonAttachments(
+    courseId: string,
+    lessonId: string,
+    files: MulterFile[],
+  ) {
+    const uploaded: any[] = [];
+
+    for (const file of files) {
+      const uploadResult = await this.cloudinaryService.uploadFile(
+        file.buffer,
+        {
+          folder: `course-content/${courseId}/${lessonId}`,
+          public_id: `${uuidv4()}-${file.originalname}`,
+          resource_type: "auto",
+        },
+      );
+
+      uploaded.push({
+        filename: file.originalname,
+        url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
+        size: file.size,
+        mime_type: file.mimetype,
+        uploaded_at: new Date(),
+      });
+    }
+
+    return uploaded;
+  }
+
   // ==================== LESSON MANAGEMENT ====================
 
   async addLesson(
     moduleId: string,
     instructorId: string,
     createLessonDto: any,
+    files?: MulterFile[],
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -596,11 +648,43 @@ export class CoursesService {
       );
     }
 
+    // Pre-generate lesson ID so the Cloudinary folder path is stable
+    const lessonId = createLessonDto.id ?? uuidv4();
+
+    // Upload any attached files (PDF, docs, images, etc.)
+    const uploadedAttachments =
+      files && files.length > 0
+        ? await this.uploadLessonAttachments(
+            module.course_id,
+            lessonId,
+            files,
+          )
+        : [];
+
+    // Merge caller-supplied link attachments with the uploads
+    const callerAttachments = Array.isArray(createLessonDto.attachments)
+      ? createLessonDto.attachments
+      : [];
+
+    const mergedAttachments = [
+      ...callerAttachments,
+      ...uploadedAttachments,
+    ];
+
+    // If no explicit resource_url was given but a file was uploaded,
+    // use the first file as the primary downloadable resource.
+    const resourceUrl =
+      createLessonDto.resource_url ??
+      (uploadedAttachments.length > 0 ? uploadedAttachments[0].url : null);
+
     const { data, error } = await supabase
       .from("course_lessons")
       .insert({
+        id: lessonId,
         ...createLessonDto,
         module_id: moduleId,
+        attachments: mergedAttachments,
+        resource_url: resourceUrl,
       })
       .select()
       .single();
@@ -613,12 +697,17 @@ export class CoursesService {
     return data;
   }
 
-  async updateLesson(lessonId: string, instructorId: string, updateData: any) {
+  async updateLesson(
+    lessonId: string,
+    instructorId: string,
+    updateData: any,
+    files?: MulterFile[],
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
       .from("course_lessons")
-      .select("module:course_modules(course_id)")
+      .select("module:course_modules(course_id), attachments")
       .eq("id", lessonId)
       .single();
 
@@ -643,9 +732,33 @@ export class CoursesService {
       );
     }
 
+    // If new files were sent, append them to the existing attachments
+    let mergedAttachments = updateData.attachments;
+
+    if (files && files.length > 0) {
+      const uploaded = await this.uploadLessonAttachments(
+        courseId,
+        lessonId,
+        files,
+      );
+      const existing = Array.isArray(lesson.attachments)
+        ? lesson.attachments
+        : [];
+      const callerProvided = Array.isArray(updateData.attachments)
+        ? updateData.attachments
+        : [];
+
+      mergedAttachments = [...existing, ...callerProvided, ...uploaded];
+    }
+
     const { data, error } = await supabase
       .from("course_lessons")
-      .update(updateData)
+      .update({
+        ...updateData,
+        ...(mergedAttachments !== undefined
+          ? { attachments: mergedAttachments }
+          : {}),
+      })
       .eq("id", lessonId)
       .select()
       .single();
@@ -705,6 +818,168 @@ export class CoursesService {
     return { message: "Lesson deleted successfully" };
   }
 
+  // ==================== LESSON ATTACHMENTS (STANDALONE) ====================
+
+  /**
+   * Add a link and/or files to an existing lesson.
+   * Useful when the instructor wants to drop a PDF or link after creation.
+   */
+  async addLessonAttachment(
+    lessonId: string,
+    instructorId: string,
+    options: {
+      link?: { filename: string; url: string };
+      files?: MulterFile[];
+    },
+  ) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: lesson, error: lessonError } = await supabase
+      .from("course_lessons")
+      .select("module:course_modules(course_id), attachments")
+      .eq("id", lessonId)
+      .single();
+
+    if (lessonError || !lesson) {
+      throw new NotFoundException("Lesson not found");
+    }
+
+    const courseId = (lesson.module as any)?.course_id;
+    const { data: course, error: courseError } = await supabase
+      .from("courses")
+      .select("instructor_id")
+      .eq("id", courseId)
+      .single();
+
+    if (courseError || !course || course.instructor_id !== instructorId) {
+      throw new ForbiddenException(
+        "You do not have permission to modify this lesson",
+      );
+    }
+
+    const existing: any[] = Array.isArray(lesson.attachments)
+      ? lesson.attachments
+      : [];
+
+    const newAttachments: any[] = [];
+
+    if (options.link) {
+      newAttachments.push({
+        filename: options.link.filename,
+        url: options.link.url,
+        uploaded_at: new Date(),
+      });
+    }
+
+    if (options.files && options.files.length > 0) {
+      const uploaded = await this.uploadLessonAttachments(
+        courseId,
+        lessonId,
+        options.files,
+      );
+      newAttachments.push(...uploaded);
+    }
+
+    if (newAttachments.length === 0) {
+      throw new BadRequestException(
+        "Provide either a link or at least one file to attach",
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("course_lessons")
+      .update({
+        attachments: [...existing, ...newAttachments],
+        updated_at: new Date(),
+      })
+      .eq("id", lessonId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new BadRequestException(
+        `Failed to add attachment: ${error.message}`,
+      );
+    }
+
+    return data;
+  }
+
+  /**
+   * Remove a single attachment by its Cloudinary public_id
+   * (or by matching URL for link-only attachments).
+   */
+  async removeLessonAttachment(
+    lessonId: string,
+    instructorId: string,
+    publicIdOrUrl: string,
+  ) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: lesson, error: lessonError } = await supabase
+      .from("course_lessons")
+      .select("module:course_modules(course_id), attachments")
+      .eq("id", lessonId)
+      .single();
+
+    if (lessonError || !lesson) {
+      throw new NotFoundException("Lesson not found");
+    }
+
+    const courseId = (lesson.module as any)?.course_id;
+    const { data: course, error: courseError } = await supabase
+      .from("courses")
+      .select("instructor_id")
+      .eq("id", courseId)
+      .single();
+
+    if (courseError || !course || course.instructor_id !== instructorId) {
+      throw new ForbiddenException(
+        "You do not have permission to modify this lesson",
+      );
+    }
+
+    const existing: any[] = Array.isArray(lesson.attachments)
+      ? lesson.attachments
+      : [];
+
+    const toRemove = existing.find(
+      (a) => a.public_id === publicIdOrUrl || a.url === publicIdOrUrl,
+    );
+    const next = existing.filter(
+      (a) => a.public_id !== publicIdOrUrl && a.url !== publicIdOrUrl,
+    );
+
+    // Best-effort Cloudinary cleanup — don't fail the request if it errors
+    if (toRemove?.public_id) {
+      try {
+        const anyCloud = this.cloudinaryService as any;
+        if (typeof anyCloud.deleteFile === "function") {
+          await anyCloud.deleteFile(toRemove.public_id);
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `Cloudinary delete failed for ${toRemove.public_id}: ${err?.message ?? err}`,
+        );
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("course_lessons")
+      .update({ attachments: next, updated_at: new Date() })
+      .eq("id", lessonId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new BadRequestException(
+        `Failed to remove attachment: ${error.message}`,
+      );
+    }
+
+    return data;
+  }
+
   // ==================== ENROLLMENT & PROGRESS ====================
 
   async enrollInCourse(userId: string, courseId: string) {
@@ -752,7 +1027,7 @@ export class CoursesService {
 
   async getUserEnrollments(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
-  
+
     const { data, error } = await supabase
       .from("course_enrollments")
       .select(
@@ -763,14 +1038,14 @@ export class CoursesService {
       )
       .eq("user_id", userId)
       .order("enrollment_date", { ascending: false });
-  
+
     if (error) {
       this.logger.error(`Failed to fetch enrollments: ${error.message}`);
       throw new BadRequestException(
         `Failed to fetch enrollments: ${error.message}`,
       );
     }
-  
+
     return (data || []).map((e: any) => ({
       ...e,
       progress_percentage: Math.round(Number(e.progress_percentage) || 0),
@@ -828,7 +1103,7 @@ export class CoursesService {
     const totalLessons = lessons?.length || 0;
     const completedLessons =
       progressRecords?.filter((r) => r.is_completed === true).length || 0;
-      const progressPercentage =
+    const progressPercentage =
       totalLessons > 0
         ? Math.round((completedLessons / totalLessons) * 100)
         : 0;
@@ -851,6 +1126,9 @@ export class CoursesService {
         video_duration: lesson.video_duration,
         text_content: lesson.text_content,
         is_free: lesson.is_free,
+        // 👇 New fields exposed to students
+        attachments: lesson.attachments ?? [],
+        resource_url: lesson.resource_url ?? null,
         is_completed: progress?.is_completed || false,
         completed_at: progress?.completed_at || null,
         last_watched_position: progress?.last_watched_position || 0,
@@ -935,41 +1213,41 @@ export class CoursesService {
 
   private async updateCourseProgress(userId: string, lessonId: string) {
     const supabase = this.supabaseService.getAdminClient();
-  
+
     const { data: lesson } = await supabase
       .from("course_lessons")
       .select("module_id")
       .eq("id", lessonId)
       .single();
-  
+
     if (!lesson) return;
-  
+
     const { data: module } = await supabase
       .from("course_modules")
       .select("course_id")
       .eq("id", lesson.module_id)
       .single();
-  
+
     if (!module) return;
-  
+
     const courseId = module.course_id;
-  
+
     const { data: courseModules } = await supabase
       .from("course_modules")
       .select("id")
       .eq("course_id", courseId);
-  
+
     if (!courseModules || courseModules.length === 0) return;
-  
+
     const moduleIds = courseModules.map((m) => m.id);
-  
+
     const { data: allLessons } = await supabase
       .from("course_lessons")
       .select("id")
       .in("module_id", moduleIds);
-  
+
     if (!allLessons || allLessons.length === 0) return;
-  
+
     const { data: completedLessons } = await supabase
       .from("user_lesson_progress")
       .select("lesson_id")
@@ -979,34 +1257,34 @@ export class CoursesService {
         "lesson_id",
         allLessons.map((l) => l.id),
       );
-  
+
     const totalLessons = allLessons.length;
     const completedCount = completedLessons?.length || 0;
-  
+
     const progressPercentage = Math.round(
       (completedCount / totalLessons) * 100,
     );
-  
+
     const isCompleted = progressPercentage >= 100;
-  
+
     const { data: existingEnrollment } = await supabase
       .from("course_enrollments")
       .select("id, completed_at")
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .maybeSingle();
-  
+
     if (!existingEnrollment) {
       this.logger.warn(
         `No enrollment found for user ${userId} in course ${courseId}`,
       );
       return;
     }
-  
+
     const completedAt = isCompleted
       ? existingEnrollment.completed_at ?? new Date().toISOString()
       : null;
-  
+
     const { error: updateError } = await supabase
       .from("course_enrollments")
       .update({
@@ -1016,13 +1294,13 @@ export class CoursesService {
       })
       .eq("user_id", userId)
       .eq("course_id", courseId);
-  
-      if (updateError) {
-        this.logger.error(
-          `Failed to update enrollment progress (user=${userId}, course=${courseId}): ${updateError.message}`,
-        );
-        return;
-      }
+
+    if (updateError) {
+      this.logger.error(
+        `Failed to update enrollment progress (user=${userId}, course=${courseId}): ${updateError.message}`,
+      );
+      return;
+    }
 
     if (isCompleted) {
       try {
@@ -1034,7 +1312,7 @@ export class CoursesService {
       }
     }
   }
-  
+
   // ==================== REVIEWS ====================
 
   async addReview(userId: string, createReviewDto: any) {
@@ -1134,7 +1412,9 @@ export class CoursesService {
       .eq("instructor_id", instructorId);
 
     if (coursesError) {
-      this.logger.error(`Failed to fetch instructor courses: ${coursesError.message}`);
+      this.logger.error(
+        `Failed to fetch instructor courses: ${coursesError.message}`,
+      );
       throw new BadRequestException(
         `Failed to fetch instructor courses: ${coursesError.message}`,
       );
@@ -1145,12 +1425,14 @@ export class CoursesService {
 
     const { data: enrollments, error: enrollError } = await supabase
       .from("course_enrollments")
-      .select(`
+      .select(
+        `
         id,
         user_id,
         course_id,
         enrollment_date
-      `)
+      `,
+      )
       .in("course_id", courseIds)
       .order("enrollment_date", { ascending: false })
       .limit(limit);
@@ -1273,14 +1555,10 @@ export class CoursesService {
       .in("id", userIds);
 
     if (profilesError) {
-      this.logger.error(
-        `Failed to fetch profiles: ${profilesError.message}`,
-      );
+      this.logger.error(`Failed to fetch profiles: ${profilesError.message}`);
     }
 
-    const profileById = new Map(
-      (profiles || []).map((p: any) => [p.id, p]),
-    );
+    const profileById = new Map((profiles || []).map((p: any) => [p.id, p]));
 
     return studentRows.map((s) => ({
       user_id: s.user_id,

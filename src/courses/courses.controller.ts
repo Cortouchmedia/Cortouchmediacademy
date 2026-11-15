@@ -11,7 +11,11 @@ import {
   Patch,
   UseGuards,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException,
 } from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import { CoursesService } from "./courses.service";
 import { CreateCourseDto } from "./dto/create-course.dto";
 import { UpdateCourseDto } from "./dto/update-course.dto";
@@ -25,6 +29,15 @@ import { InstructorGuard } from "../auth/instructor.guard";
 import { AdminGuard } from "../auth/admin.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
+
 type AuthUser = { id: string; email?: string; role?: string };
 
 @Controller("api/courses")
@@ -35,6 +48,34 @@ export class CoursesController {
   private isAdmin(user: AuthUser): boolean {
     const role = (user.role ?? "").toUpperCase();
     return role === "ADMIN" || role === "SUPERADMIN";
+  }
+
+  /**
+   * Multipart form-data sends everything as strings, so coerce
+   * `attachments`, `is_free`, `order_number`, `video_duration`.
+   */
+  private normalizeLessonBody(body: any) {
+    const out: any = { ...body };
+
+    if (typeof out.attachments === "string") {
+      try {
+        out.attachments = JSON.parse(out.attachments);
+      } catch {
+        out.attachments = [];
+      }
+    }
+
+    if (typeof out.is_free === "string") {
+      out.is_free = out.is_free === "true";
+    }
+    if (typeof out.order_number === "string") {
+      out.order_number = Number(out.order_number);
+    }
+    if (typeof out.video_duration === "string") {
+      out.video_duration = Number(out.video_duration);
+    }
+
+    return out;
   }
 
   // ==================== PUBLIC ROUTES ====================
@@ -89,7 +130,6 @@ export class CoursesController {
     return this.coursesService.createCourse(user.id, createCourseDto);
   }
 
-  // 🔥 UPDATED: allows instructors (own courses) AND admins (any course)
   @Put(":id")
   @UseGuards(SupabaseAuthGuard)
   async updateCourse(
@@ -178,25 +218,40 @@ export class CoursesController {
     return this.coursesService.deleteModule(moduleId, user.id);
   }
 
-  // Lesson routes
+  // ==================== LESSON ROUTES (with file uploads) ====================
+
   @Post("modules/:moduleId/lessons")
   @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseInterceptors(FilesInterceptor("files", 10))
   async addLesson(
     @Param("moduleId") moduleId: string,
-    @Body() createLessonDto: CreateLessonDto,
+    @Body() body: any,
+    @UploadedFiles() files: MulterFile[],
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.addLesson(moduleId, user.id, createLessonDto);
+    return this.coursesService.addLesson(
+      moduleId,
+      user.id,
+      this.normalizeLessonBody(body),
+      files,
+    );
   }
 
   @Put("lessons/:lessonId")
   @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseInterceptors(FilesInterceptor("files", 10))
   async updateLesson(
     @Param("lessonId") lessonId: string,
-    @Body() updateData: any,
+    @Body() body: any,
+    @UploadedFiles() files: MulterFile[],
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.updateLesson(lessonId, user.id, updateData);
+    return this.coursesService.updateLesson(
+      lessonId,
+      user.id,
+      this.normalizeLessonBody(body),
+      files,
+    );
   }
 
   @Delete("lessons/:lessonId")
@@ -206,6 +261,56 @@ export class CoursesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.coursesService.deleteLesson(lessonId, user.id);
+  }
+
+  // ==================== LESSON ATTACHMENTS (standalone) ====================
+
+  /**
+   * Add a link and/or files to an existing lesson.
+   * multipart fields:
+   *   link_filename, link_url   (optional — for link-only attachments)
+   *   files                      (optional — 1..10 files)
+   */
+  @Post("lessons/:lessonId/attachments")
+  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseInterceptors(FilesInterceptor("files", 10))
+  async addLessonAttachment(
+    @Param("lessonId") lessonId: string,
+    @Body() body: { link_filename?: string; link_url?: string },
+    @UploadedFiles() files: MulterFile[],
+    @CurrentUser() user: AuthUser,
+  ) {
+    const hasFiles = !!files && files.length > 0;
+    const link =
+      body?.link_url && body?.link_filename
+        ? { filename: body.link_filename, url: body.link_url }
+        : undefined;
+
+    if (!link && !hasFiles) {
+      throw new BadRequestException(
+        "Provide link_filename + link_url, or at least one file",
+      );
+    }
+
+    return this.coursesService.addLessonAttachment(lessonId, user.id, {
+      link,
+      files,
+    });
+  }
+
+  @Delete("lessons/:lessonId/attachments/:identifier")
+  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  async removeLessonAttachment(
+    @Param("lessonId") lessonId: string,
+    @Param("identifier") identifier: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    // identifier can be a Cloudinary public_id (contains slashes) or a URL.
+    return this.coursesService.removeLessonAttachment(
+      lessonId,
+      user.id,
+      decodeURIComponent(identifier),
+    );
   }
 
   // ==================== STUDENT ROUTES ====================
