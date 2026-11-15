@@ -30,6 +30,19 @@ export interface Project {
   isGrading?: boolean;
 }
 
+// ============================================================
+// Lesson attachments (PDFs, docs, links alongside video)
+// ============================================================
+
+export interface LessonAttachment {
+  filename: string;
+  url: string;
+  public_id?: string;      // present only for uploaded files (Cloudinary)
+  size?: number;
+  mime_type?: string;
+  uploaded_at?: string;
+}
+
 export interface Lesson {
   id: number | string;            
   title: string;
@@ -38,6 +51,12 @@ export interface Lesson {
   videoUrl?: string;
   content?: string;
   isCompleted: boolean;
+
+  // 👇 NEW — populated by backend for lessons with attachments
+  attachments?: LessonAttachment[];
+  resource_url?: string | null;
+  description?: string | null;
+  order_number?: number;
 }
 
 export interface Module {

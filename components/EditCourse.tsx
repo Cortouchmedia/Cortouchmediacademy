@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import type { Course, Lesson, Webinar } from '../types';
+import type { Course, Lesson, Webinar, LessonAttachment } from '../types';
 import { Icon } from './Icon';
 import { useAppContext } from '../context/AppContext';
 
@@ -19,6 +19,8 @@ interface EditCourseProps {
       durationMinutes?: number;
       isFree?: boolean;
     },
+    files?: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
   ) => Promise<void>;
   onDeleteLesson: (courseId: number | string, lessonId: number | string) => Promise<void>;
   onAddWebinar: (courseId: number | string, webinarData: Omit<Webinar, 'id'>) => void;
@@ -64,6 +66,31 @@ const initialProjectState = {
   pointsPossible: 100,
 };
 
+// ============================================================
+// Attachment helpers
+// ============================================================
+
+const getAttachmentIcon = (att: { mime_type?: string; url: string }) => {
+  const mime = (att.mime_type ?? '').toLowerCase();
+  const url = att.url.toLowerCase();
+  if (mime.includes('pdf') || url.endsWith('.pdf')) return '📄';
+  if (mime.includes('word') || mime.includes('document') || url.endsWith('.doc') || url.endsWith('.docx')) return '📝';
+  if (mime.includes('sheet') || mime.includes('excel') || url.endsWith('.xls') || url.endsWith('.xlsx') || url.endsWith('.csv')) return '📊';
+  if (mime.includes('presentation') || mime.includes('powerpoint') || url.endsWith('.ppt') || url.endsWith('.pptx')) return '📽️';
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.includes('zip') || url.endsWith('.zip') || url.endsWith('.rar')) return '🗜️';
+  if (url.includes('drive.google.com')) return '📁';
+  if (url.includes('github.com')) return '💻';
+  return '📎';
+};
+
+const formatBytes = (bytes?: number) => {
+  if (!bytes || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
 export const EditCourse: React.FC<EditCourseProps> = ({
   course,
   allCourses,
@@ -79,7 +106,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   onAIGrade,
   onApproveGrade,
 }) => {
-  const { logAuditEvent, currentUser } = useAppContext();
+  const { logAuditEvent, currentUser, handleLessonAttachmentRemove } = useAppContext();
 
   const [details, setDetails] = useState({
     title: course?.title ?? '',
@@ -102,21 +129,25 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   const [newWebinarData, setNewWebinarData] = useState(initialWebinarState);
   const [newProjectData, setNewProjectData] = useState(initialProjectState);
 
-    const [reviewingProjectId, setReviewingProjectId] = useState<string | null>(null);
-    const [reviewingProjectTitle, setReviewingProjectTitle] = useState<string>('');
-    const [projectSubmissions, setProjectSubmissions] = useState<any[]>([]);
-    const [loadingSubmissions, setLoadingSubmissions] = useState(false);
-    const [gradingInProgress, setGradingInProgress] = useState<string | null>(null);
-    const [aiDrafts, setAiDrafts] = useState<Record<string, { score: number; feedback: string; rubric: any[] }>>({});
-    const [editedGrades, setEditedGrades] = useState<Record<string, { grade: number; feedback: string }>>({});
-    const [approvingId, setApprovingId] = useState<string | null>(null);
+  // 👇 NEW — file + link state for new lesson
+  const [newLessonFiles, setNewLessonFiles] = useState<File[]>([]);
+  const [newLessonLinks, setNewLessonLinks] = useState<Array<{ filename: string; url: string }>>([]);
+  const [linkFilenameInput, setLinkFilenameInput] = useState('');
+  const [linkUrlInput, setLinkUrlInput] = useState('');
 
-  // Local copy of modules so the UI updates immediately, even if the backend is slow or broken
+  const [reviewingProjectId, setReviewingProjectId] = useState<string | null>(null);
+  const [reviewingProjectTitle, setReviewingProjectTitle] = useState<string>('');
+  const [projectSubmissions, setProjectSubmissions] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [gradingInProgress, setGradingInProgress] = useState<string | null>(null);
+  const [aiDrafts, setAiDrafts] = useState<Record<string, { score: number; feedback: string; rubric: any[] }>>({});
+  const [editedGrades, setEditedGrades] = useState<Record<string, { grade: number; feedback: string }>>({});
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
   const [localModules, setLocalModules] = useState<any[]>(() =>
     Array.isArray(course?.content) ? course.content : []
   );
 
-  // Sync with course prop when it changes / when real data arrives
   useEffect(() => {
     if (Array.isArray(course?.content) && course.content.length > 0) {
       setLocalModules(course.content);
@@ -163,16 +194,12 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       __optimistic: true,
     };
 
-    // 1. Show it immediately
     setLocalModules((prev) => [...prev, optimisticModule]);
     setNewModuleTitle('');
 
-    // 2. Persist to backend
     try {
       const created = await onAddModule(course.id, titleToSave);
       logAuditEvent('Module Added', `Added module "${titleToSave}" to ${course.title}`, 'course');
-    
-      // Replace the optimistic temp id with the real DB id from the server
       if (created?.id) {
         setLocalModules((prev) =>
           prev.map((m) =>
@@ -183,13 +210,13 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     } catch (err) {
       console.error('Module add failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to add module');
-      // Remove the optimistic module so the UI matches reality
       setLocalModules((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setIsSaving(false);
     }
   };
 
+  // 👇 UPDATED — now passes files + links
   const handleAddLesson = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLessonData.title.trim() || !addingLessonToModuleId) return;
@@ -206,34 +233,58 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       content: newLessonData.content,
       description: newLessonData.description,
       isFree: newLessonData.isFree,
+      attachments: [
+        ...newLessonLinks.map((l) => ({
+          filename: l.filename,
+          url: l.url,
+        })),
+        ...newLessonFiles.map((f) => ({
+          filename: f.name,
+          url: '', // placeholder until refresh
+          mime_type: f.type,
+          size: f.size,
+        })),
+      ],
       __optimistic: true,
     };
 
-    // 1. Show it immediately
     setLocalModules((prev) =>
       prev.map((m) =>
         m.id === moduleId ? { ...m, lessons: [...(m.lessons ?? []), lessonPayload] } : m,
       ),
     );
 
-    // 2. Persist to backend
     try {
-      await onAddLesson(course.id, moduleId, {
-        title: newLessonData.title,
-        duration: newLessonData.duration,
-        type: newLessonData.type,
-        videoUrl: newLessonData.videoUrl,
-        content: newLessonData.content,
-        description: newLessonData.description,
-        durationMinutes: parseInt(newLessonData.duration) || undefined,
-        isFree: newLessonData.isFree,
-      });
-      logAuditEvent('Lesson Added', `Added lesson "${newLessonData.title}" to ${course.title}`, 'course');
+      await onAddLesson(
+        course.id,
+        moduleId,
+        {
+          title: newLessonData.title,
+          duration: newLessonData.duration,
+          type: newLessonData.type,
+          videoUrl: newLessonData.videoUrl,
+          content: newLessonData.content,
+          description: newLessonData.description,
+          durationMinutes: parseInt(newLessonData.duration) || undefined,
+          isFree: newLessonData.isFree,
+        },
+        newLessonFiles.length > 0 ? newLessonFiles : undefined,
+        newLessonLinks.length > 0 ? newLessonLinks : undefined,
+      );
+      logAuditEvent(
+        'Lesson Added',
+        `Added lesson "${newLessonData.title}" to ${course.title}${newLessonFiles.length ? ` with ${newLessonFiles.length} file(s)` : ''}`,
+        'course',
+      );
     } catch (err) {
       console.error('Lesson add failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to add lesson');
     } finally {
       setNewLessonData(initialLessonState);
+      setNewLessonFiles([]);
+      setNewLessonLinks([]);
+      setLinkFilenameInput('');
+      setLinkUrlInput('');
       setAddingLessonToModuleId(null);
       setIsSaving(false);
     }
@@ -244,6 +295,77 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   ) => {
     const { name, value } = e.target;
     setNewLessonData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // 👇 NEW — file picker handler
+  const handleLessonFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const incoming = Array.from(e.target.files);
+    const combined = [...newLessonFiles, ...incoming].slice(0, 10);
+    setNewLessonFiles(combined);
+    e.target.value = ''; // reset input so same file can be re-picked after removal
+  };
+
+  const removeLessonFile = (idx: number) => {
+    setNewLessonFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // 👇 NEW — link adder
+  const handleAddLink = () => {
+    const url = linkUrlInput.trim();
+    const name = linkFilenameInput.trim();
+    if (!url || !name) {
+      alert('Provide both a name and a URL for the link.');
+      return;
+    }
+    try {
+      new URL(url);
+    } catch {
+      alert('That doesn\'t look like a valid URL.');
+      return;
+    }
+    setNewLessonLinks((prev) => [...prev, { filename: name, url }]);
+    setLinkFilenameInput('');
+    setLinkUrlInput('');
+  };
+
+  const removeLessonLink = (idx: number) => {
+    setNewLessonLinks((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // 👇 NEW — delete an existing attachment from a saved lesson
+  const handleDeleteAttachment = async (
+    lessonId: string | number,
+    identifier: string,
+    moduleId: string | number,
+  ) => {
+    if (!confirm('Remove this attachment? This cannot be undone.')) return;
+    try {
+      await handleLessonAttachmentRemove(lessonId, identifier);
+      // Optimistically update localModules
+      setLocalModules((prev) =>
+        prev.map((m) =>
+          m.id === moduleId
+            ? {
+                ...m,
+                lessons: (m.lessons ?? []).map((l: any) =>
+                  String(l.id) === String(lessonId)
+                    ? {
+                        ...l,
+                        attachments: (l.attachments ?? []).filter(
+                          (a: any) => (a.public_id ?? a.url) !== identifier,
+                        ),
+                      }
+                    : l,
+                ),
+              }
+            : m,
+        ),
+      );
+    } catch (err) {
+      console.error('Attachment delete failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to remove attachment');
+    }
   };
 
   const handleNewWebinarChange = (
@@ -316,7 +438,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     }
   };
 
-
   const openSubmissions = async (projectId: string | number, projectTitle: string) => {
     if (!currentUser) return;
     setReviewingProjectId(String(projectId));
@@ -340,20 +461,17 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       const list = Array.isArray(submissions) ? submissions : [];
       setProjectSubmissions(list);
 
-      // Pre-populate AI drafts from existing submissions
       const drafts: Record<string, { score: number; feedback: string; rubric: any[] }> = {};
       const grades: Record<string, { grade: number; feedback: string }> = {};
 
       list.forEach((s: any) => {
         const sid = String(s.id);
-
         if (s.ai_score != null || s.ai_feedback) {
           drafts[sid] = {
             score: Number(s.ai_score ?? 0),
             feedback: String(s.ai_feedback ?? ''),
             rubric: Array.isArray(s.ai_rubric) ? s.ai_rubric : [],
           };
-
           if (s.grade != null) {
             grades[sid] = {
               grade: Number(s.grade),
@@ -411,7 +529,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     setError(null);
     try {
       await onApproveGrade(submissionId, edited.grade, edited.feedback);
-      // Update local state so the submission shows as graded
       setProjectSubmissions((prev) =>
         prev.map((s) =>
           String(s.id) === submissionId
@@ -502,44 +619,95 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       <div className="bg-brand-surface rounded-lg p-6 md:p-8 border border-gray-200">
         <h2 className="text-2xl font-semibold text-gray-900 mb-6">Course Content</h2>
         <div className="space-y-4">
-        {localModules.map((module) => (
+          {localModules.map((module) => (
             <div key={module.id} className="bg-brand-bg/60 p-4 rounded-lg border border-gray-200">
               <h3 className="font-bold text-lg text-gray-800">{module.title}</h3>
               <ul className="mt-2 space-y-2 pl-4">
-              {(module.lessons ?? []).map((lesson: any) => (
-                  <li key={lesson.id} className="flex items-center justify-between gap-2 text-sm text-brand-muted hover:bg-white/50 p-1 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <Icon name={lesson.type === 'video' ? 'play' : 'document'} className="w-4 h-4 text-brand-secondary" />
-                      <span>
-                        {lesson.title} ({lesson.duration})
-                        {lesson.isCompleted ? ' • completed' : ''}
-                      </span>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Delete lesson "${lesson.title}"?`)) return;
-                        setError(null);
-                        try {
-                          await onDeleteLesson(course.id, lesson.id);
-                          setLocalModules((prev) =>
-                            prev.map((m) =>
-                              m.id === module.id
-                                ? { ...m, lessons: (m.lessons ?? []).filter((l: any) => l.id !== lesson.id) }
-                                : m,
-                            ),
-                          );
-                          logAuditEvent('Lesson Deleted', `Deleted lesson "${lesson.title}" from ${course.title}`, 'course');
-                        } catch (err) {
-                          console.error('Lesson delete failed:', err);
-                          setError(err instanceof Error ? err.message : 'Failed to delete lesson');
-                        }
-                      }}
-                      className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors"
-                    >
-                      <Icon name="trash" className="w-4 h-4" />
-                    </button>
-                  </li>
-                ))}
+                {(module.lessons ?? []).map((lesson: any) => {
+                  // 👇 NEW — resolve attachments list
+                  const attachments: LessonAttachment[] = Array.isArray(lesson.attachments)
+                    ? lesson.attachments
+                    : [];
+
+                  return (
+                    <li key={lesson.id} className="text-sm text-brand-muted hover:bg-white/50 p-2 rounded-md">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Icon name={lesson.type === 'video' ? 'play' : 'document'} className="w-4 h-4 text-brand-secondary flex-shrink-0" />
+                          <span className="truncate">
+                            {lesson.title} ({lesson.duration})
+                            {lesson.isCompleted ? ' • completed' : ''}
+                          </span>
+                          {attachments.length > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 text-xs text-brand-muted bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0"
+                              title={`${attachments.length} attachment${attachments.length === 1 ? '' : 's'}`}
+                            >
+                              📎 {attachments.length}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Delete lesson "${lesson.title}"?`)) return;
+                            setError(null);
+                            try {
+                              await onDeleteLesson(course.id, lesson.id);
+                              setLocalModules((prev) =>
+                                prev.map((m) =>
+                                  m.id === module.id
+                                    ? { ...m, lessons: (m.lessons ?? []).filter((l: any) => l.id !== lesson.id) }
+                                    : m,
+                                ),
+                              );
+                              logAuditEvent('Lesson Deleted', `Deleted lesson "${lesson.title}" from ${course.title}`, 'course');
+                            } catch (err) {
+                              console.error('Lesson delete failed:', err);
+                              setError(err instanceof Error ? err.message : 'Failed to delete lesson');
+                            }
+                          }}
+                          className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors flex-shrink-0"
+                        >
+                          <Icon name="trash" className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* 👇 NEW — existing attachment list with delete buttons */}
+                      {attachments.length > 0 && (
+                        <ul className="mt-2 ml-6 space-y-1">
+                          {attachments.map((att, idx) => {
+                            const identifier = att.public_id ?? att.url;
+                            return (
+                              <li
+                                key={att.public_id ?? att.url ?? idx}
+                                className="flex items-center gap-2 text-xs text-gray-700 bg-white border border-gray-100 rounded px-2 py-1"
+                              >
+                                <span aria-hidden>{getAttachmentIcon(att)}</span>
+                                <a
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="truncate flex-1 hover:text-brand-primary hover:underline"
+                                  title={att.filename}
+                                >
+                                  {att.filename || 'Untitled'}
+                                  {att.size ? ` · ${formatBytes(att.size)}` : ''}
+                                </a>
+                                <button
+                                  onClick={() => handleDeleteAttachment(lesson.id, identifier, module.id)}
+                                  className="text-red-500 hover:bg-red-100 rounded-full p-0.5 flex-shrink-0"
+                                  title="Remove attachment"
+                                >
+                                  <Icon name="x" className="w-3 h-3" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
                 {(module.lessons ?? []).length === 0 && (
                   <p className="text-sm text-brand-muted italic">No lessons in this module yet.</p>
                 )}
@@ -578,11 +746,112 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                     <textarea name="content" value={newLessonData.content} onChange={handleNewLessonChange} placeholder="Lesson text content..." rows={4} className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm" />
                   )}
 
+                  {/* 👇 NEW — Lesson Materials section */}
+                  <div className="border-t border-gray-200 pt-4 space-y-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-800 mb-2">
+                        📎 Lesson Materials (optional)
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Upload PDFs, docs, images, or add external links like Google Drive or GitHub.
+                      </p>
+                      <input
+                        type="file"
+                        multiple
+                        onChange={handleLessonFileSelect}
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.zip,.txt,image/*"
+                        className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-primary file:text-white file:font-semibold file:cursor-pointer hover:file:bg-brand-primary/90"
+                      />
+                    </div>
+
+                    {/* Files queued for upload */}
+                    {newLessonFiles.length > 0 && (
+                      <ul className="space-y-1">
+                        {newLessonFiles.map((f, idx) => (
+                          <li
+                            key={`${f.name}-${idx}`}
+                            className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
+                          >
+                            <span aria-hidden>📄</span>
+                            <span className="flex-1 truncate">{f.name}</span>
+                            <span className="text-gray-400">{formatBytes(f.size)}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeLessonFile(idx)}
+                              className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                            >
+                              <Icon name="x" className="w-3 h-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Link input + list */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        placeholder="Link name (e.g., React Docs)"
+                        value={linkFilenameInput}
+                        onChange={(e) => setLinkFilenameInput(e.target.value)}
+                        className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
+                      />
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={linkUrlInput}
+                        onChange={(e) => setLinkUrlInput(e.target.value)}
+                        className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddLink}
+                        className="px-3 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-brand-secondary/90 whitespace-nowrap"
+                      >
+                        + Add Link
+                      </button>
+                    </div>
+
+                    {newLessonLinks.length > 0 && (
+                      <ul className="space-y-1">
+                        {newLessonLinks.map((l, idx) => (
+                          <li
+                            key={`${l.url}-${idx}`}
+                            className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
+                          >
+                            <span aria-hidden>🔗</span>
+                            <span className="truncate flex-1">
+                              {l.filename} — <span className="text-gray-500">{l.url}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeLessonLink(idx)}
+                              className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                            >
+                              <Icon name="x" className="w-3 h-3" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
                   <div className="flex gap-2">
                     <button type="submit" disabled={isSaving} className="px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-opacity-80 disabled:opacity-50">
                       {isSaving ? 'Saving…' : 'Save Lesson'}
                     </button>
-                    <button type="button" onClick={() => setAddingLessonToModuleId(null)} className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-300">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingLessonToModuleId(null);
+                        setNewLessonData(initialLessonState);
+                        setNewLessonFiles([]);
+                        setNewLessonLinks([]);
+                        setLinkFilenameInput('');
+                        setLinkUrlInput('');
+                      }}
+                      className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-300"
+                    >
                       Cancel
                     </button>
                   </div>
@@ -657,8 +926,8 @@ export const EditCourse: React.FC<EditCourseProps> = ({
         </form>
       </div>
 
-           {/* Manage Projects */}
-           <div className="bg-brand-surface rounded-lg p-6 md:p-8 border border-gray-200">
+      {/* Manage Projects */}
+      <div className="bg-brand-surface rounded-lg p-6 md:p-8 border border-gray-200">
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">Manage Projects</h2>
         <p className="text-sm text-brand-muted mb-6">
           Each student gets a personalized 3-week deadline starting the day
@@ -666,7 +935,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
           students before they finish.
         </p>
 
-        {/* Existing projects */}
         <div className="space-y-3 mb-6">
           {(course.projects || []).map((project: any) => (
             <div
@@ -718,7 +986,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
           )}
         </div>
 
-        {/* Add new project form */}
         <form
           onSubmit={handleAddProject}
           className="p-4 bg-white border border-brand-primary/20 rounded-lg space-y-4"
@@ -754,7 +1021,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
             className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm"
           />
 
-<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-medium text-brand-muted mb-1">
                 Suggested Date <span className="text-gray-400">(optional)</span>
@@ -804,11 +1071,11 @@ export const EditCourse: React.FC<EditCourseProps> = ({
             className="px-4 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-opacity-80 disabled:opacity-50"
           >
             {isSaving ? 'Adding…' : 'Add Project'}
-            </button>
+          </button>
         </form>
       </div>
 
-      {/* Submissions Review Modal */}
+      {/* Submissions Review Modal — unchanged, kept as-is */}
       {reviewingProjectId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-4xl my-8 shadow-2xl">
@@ -853,7 +1120,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
 
                 return (
                   <div key={sid} className="bg-gray-50 rounded-xl border border-gray-200 p-5 space-y-4">
-                    {/* Header */}
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div>
                         <p className="font-bold text-gray-900">
@@ -876,7 +1142,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                       )}
                     </div>
 
-                    {/* Description */}
                     {submission.description && (
                       <div>
                         <p className="text-xs font-bold text-brand-muted uppercase mb-1">
@@ -888,7 +1153,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                       </div>
                     )}
 
-                    {/* Screenshots */}
                     {screenshots.length > 0 && (
                       <div>
                         <p className="text-xs font-bold text-brand-muted uppercase mb-2">
@@ -914,7 +1178,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                       </div>
                     )}
 
-                    {/* Submission URL */}
                     {submission.submission_url && (
                       <div>
                         <p className="text-xs font-bold text-brand-muted uppercase mb-1">
@@ -931,7 +1194,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                       </div>
                     )}
 
-                    {/* Existing grade */}
                     {isApproved && (
                       <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <p className="text-sm font-bold text-green-800">
@@ -945,10 +1207,8 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                       </div>
                     )}
 
-                                        {/* AI grading section */}
-                                        {!isApproved && (
+                    {!isApproved && (
                       <div className="border-t border-gray-200 pt-4 space-y-3">
-                        {/* Case 1: No AI draft yet — offer manual trigger */}
                         {!draft && (
                           <div className="flex items-center gap-3 flex-wrap">
                             <p className="text-sm text-brand-muted italic">
@@ -965,7 +1225,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                           </div>
                         )}
 
-                        {/* Case 2: AI report exists — show it, editable, with publish button */}
                         {draft && edited && (
                           <>
                             <div className="flex items-center gap-2 mb-2">

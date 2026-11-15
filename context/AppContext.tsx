@@ -69,6 +69,30 @@ interface AppContextType {
       isFree?: boolean;
     },
   ) => Promise<void>;
+
+  handleLessonWithFiles: (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+    files: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
+  ) => Promise<void>;
+
+  handleLessonAttachmentAdd: (
+    lessonId: string | number,
+    payload: { link?: { filename: string; url: string }; files?: File[] },
+  ) => Promise<void>;
+
+  handleLessonAttachmentRemove: (
+    lessonId: string | number,
+    identifier: string,
+  ) => Promise<void>;
+
+
   handleLessonDelete: (courseId: number | string, lessonId: number | string) => Promise<void>;
   handleWebinarAdd: (courseId: number | string, webinarData: Omit<Webinar, 'id'>) => void;
   handleWebinarDelete: (courseId: number | string, webinarId: number | string) => void;
@@ -1072,6 +1096,84 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     logAuditEvent('Lesson Added', `Added lesson "${lessonData.title}"`, 'course');
   };
 
+  const handleLessonWithFiles = async (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+    files: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
+  ): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+
+    const course = courses.find((c) => String(c.id) === String(courseId));
+    const moduleObj = course?.content?.find((m) => String(m.id) === String(moduleId));
+    const order_number = moduleObj?.lessons?.length ?? 0;
+
+    await Api.courses.createLesson(
+      String(moduleId),
+      {
+        title: lessonData.title,
+        description: lessonData.description,
+        video_url: lessonData.videoUrl,
+        video_duration: lessonData.durationMinutes,
+        text_content: lessonData.content,
+        order_number,
+        is_free: lessonData.isFree ?? false,
+        attachments: linkAttachments,
+      },
+      files,
+      token,
+    );
+
+    await refreshCourses();
+    logAuditEvent(
+      'Lesson Added',
+      `Added lesson "${lessonData.title}" with ${files.length} file(s)`,
+      'course',
+    );
+  };
+
+  const handleLessonAttachmentAdd = async (
+    lessonId: string | number,
+    payload: { link?: { filename: string; url: string }; files?: File[] },
+  ): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+
+    await Api.courses.addLessonAttachment(String(lessonId), payload, token);
+    await refreshCourses();
+    logAuditEvent(
+      'Lesson Attachment Added',
+      `Added attachment to lesson ${lessonId}`,
+      'course',
+    );
+  };
+
+  const handleLessonAttachmentRemove = async (
+    lessonId: string | number,
+    identifier: string,
+  ): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+
+    await Api.courses.removeLessonAttachment(
+      String(lessonId),
+      identifier,
+      token,
+    );
+    await refreshCourses();
+    logAuditEvent(
+      'Lesson Attachment Removed',
+      `Removed attachment from lesson ${lessonId}`,
+      'course',
+    );
+  };
+
   const handleLessonDelete = async (courseId: number | string, lessonId: number | string): Promise<void> => {
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
@@ -1267,6 +1369,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
     handleCourseUpdate, handleCourseDelete, handleCourseApprove, handleModuleAdd, handleLessonAdd, handleLessonDelete,
+    handleLessonWithFiles, handleLessonAttachmentAdd, handleLessonAttachmentRemove,
     handleWebinarAdd, handleWebinarDelete, handleWebinarRegister,
     handleProjectAdd, handleProjectDelete,
     handleProjectSubmitWithFiles, handleAIGrade, handleApproveGrade,

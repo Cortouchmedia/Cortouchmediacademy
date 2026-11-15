@@ -149,6 +149,57 @@ export interface Course {
  [key: string]: unknown;
 }
 
+// ============================================================
+// Lesson + attachment types
+// ============================================================
+
+export interface LessonAttachment {
+  filename: string;
+  url: string;
+  public_id?: string;      // present only for uploaded files (Cloudinary)
+  size?: number;
+  mime_type?: string;
+  uploaded_at?: string;
+}
+
+export interface CourseLesson {
+  id: string;
+  title: string;
+  description?: string | null;
+  order_number?: number;
+  video_url?: string | null;
+  video_duration?: number | null;
+  text_content?: string | null;
+  is_free?: boolean;
+  attachments?: LessonAttachment[];
+  resource_url?: string | null;
+  is_completed?: boolean;
+  completed_at?: string | null;
+  last_watched_position?: number;
+}
+
+export interface CourseModule {
+  id: string;
+  title: string;
+  description?: string | null;
+  order_number?: number;
+  lessons: CourseLesson[];
+}
+
+export interface CourseWithModules extends Course {
+  modules: CourseModule[];
+  enrollment_count?: number;
+  average_rating?: number;
+  projects?: unknown[];
+  stats?: {
+    totalLessons: number;
+    totalDuration: number;
+    totalReviews: number;
+    averageRating: number;
+    totalEnrollments: number;
+  };
+}
+
 
 
 // ============================================================
@@ -173,6 +224,42 @@ export async function apiUpload<T = unknown>(
     headers,
     body: formData,
   });
+
+  const text = await res.text();
+  let parsed: unknown = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = text;
+  }
+
+  if (!res.ok) {
+    const message =
+      (parsed as any)?.message ??
+      (parsed as any)?.error ??
+      `Request failed with status ${res.status}`;
+    throw new ApiError(res.status, String(message), parsed);
+  }
+
+  return parsed as T;
+}
+
+/**
+ * Same as apiUpload, but lets you choose the HTTP method.
+ * Needed for PUT/PATCH endpoints that accept multipart/form-data
+ * (e.g. updating a lesson with new attachments).
+ */
+export async function apiUploadWithMethod<T = unknown>(
+  path: string,
+  formData: FormData,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  token?: string,
+): Promise<T> {
+  const url = path.startsWith('http') ? path : `${API_URL}${path}`;
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(url, { method, headers, body: formData });
 
   const text = await res.text();
   let parsed: unknown = null;
@@ -234,7 +321,7 @@ export const Api = {
  // Courses
  courses: {
    list: () => api.get<Course[]>('/courses'),
-   get: (id: string | number) => api.get<Course>(`/courses/${id}`),
+   get: (id: string | number) => api.get<CourseWithModules>(`/courses/${id}`),
    reviews: (id: string | number) => api.get(`/courses/${id}/reviews`),
    create: (body: unknown, token: string) =>
      api.post('/courses', body, token),
@@ -262,6 +349,142 @@ export const Api = {
       avg_progress: number;
       course_ids: string[];
     }>>(`/courses/instructor/${instructorId}/students`, token),
+
+  // ==================== LESSONS ====================
+
+  /**
+   * Create a lesson. Supports optional file attachments (PDF, docs, images).
+   * `fields.attachments` may contain link-only entries (e.g. Drive URLs);
+   * these are merged on the backend with the uploaded files.
+   */
+  createLesson: (
+    moduleId: string,
+    fields: {
+      title: string;
+      description?: string;
+      video_url?: string;
+      video_duration?: number;
+      text_content?: string;
+      is_free?: boolean;
+      order_number?: number;
+      resource_url?: string;
+      attachments?: LessonAttachment[];
+    },
+    files: File[],
+    token: string,
+  ) => {
+    const fd = new FormData();
+    fd.append('title', fields.title);
+    if (fields.description) fd.append('description', fields.description);
+    if (fields.video_url) fd.append('video_url', fields.video_url);
+    if (fields.video_duration !== undefined)
+      fd.append('video_duration', String(fields.video_duration));
+    if (fields.text_content) fd.append('text_content', fields.text_content);
+    if (fields.is_free !== undefined)
+      fd.append('is_free', String(fields.is_free));
+    if (fields.order_number !== undefined)
+      fd.append('order_number', String(fields.order_number));
+    if (fields.resource_url) fd.append('resource_url', fields.resource_url);
+    if (fields.attachments && fields.attachments.length > 0)
+      fd.append('attachments', JSON.stringify(fields.attachments));
+    files.forEach((file) => fd.append('files', file));
+
+    return apiUpload<CourseLesson>(
+      `/courses/modules/${moduleId}/lessons`,
+      fd,
+      token,
+    );
+  },
+
+  /**
+   * Update a lesson (PUT). Files are appended to existing attachments.
+   */
+  updateLesson: (
+    lessonId: string,
+    fields: Partial<{
+      title: string;
+      description: string;
+      video_url: string;
+      video_duration: number;
+      text_content: string;
+      is_free: boolean;
+      order_number: number;
+      resource_url: string;
+      attachments: LessonAttachment[];
+    }>,
+    files: File[],
+    token: string,
+  ) => {
+    const fd = new FormData();
+    if (fields.title !== undefined) fd.append('title', fields.title);
+    if (fields.description !== undefined)
+      fd.append('description', fields.description);
+    if (fields.video_url !== undefined)
+      fd.append('video_url', fields.video_url);
+    if (fields.video_duration !== undefined)
+      fd.append('video_duration', String(fields.video_duration));
+    if (fields.text_content !== undefined)
+      fd.append('text_content', fields.text_content);
+    if (fields.is_free !== undefined)
+      fd.append('is_free', String(fields.is_free));
+    if (fields.order_number !== undefined)
+      fd.append('order_number', String(fields.order_number));
+    if (fields.resource_url !== undefined)
+      fd.append('resource_url', fields.resource_url);
+    if (fields.attachments !== undefined)
+      fd.append('attachments', JSON.stringify(fields.attachments));
+    files.forEach((file) => fd.append('files', file));
+
+    return apiUploadWithMethod<CourseLesson>(
+      `/courses/lessons/${lessonId}`,
+      fd,
+      'PUT',
+      token,
+    );
+  },
+
+  deleteLesson: (lessonId: string, token: string) =>
+    api.delete<{ message: string }>(`/courses/lessons/${lessonId}`, token),
+
+  /**
+   * Add a link and/or files to an EXISTING lesson without re-sending the
+   * whole lesson payload. Either pass `link` or at least one file.
+   */
+  addLessonAttachment: (
+    lessonId: string,
+    payload: {
+      link?: { filename: string; url: string };
+      files?: File[];
+    },
+    token: string,
+  ) => {
+    const fd = new FormData();
+    if (payload.link) {
+      fd.append('link_filename', payload.link.filename);
+      fd.append('link_url', payload.link.url);
+    }
+    (payload.files ?? []).forEach((f) => fd.append('files', f));
+
+    return apiUpload<CourseLesson>(
+      `/courses/lessons/${lessonId}/attachments`,
+      fd,
+      token,
+    );
+  },
+
+  /**
+   * Remove a single attachment by its Cloudinary public_id OR its URL.
+   * The identifier is URL-encoded so slashes in public_id survive.
+   */
+  removeLessonAttachment: (
+    lessonId: string,
+    identifier: string,
+    token: string,
+  ) =>
+    api.delete<CourseLesson>(
+      `/courses/lessons/${lessonId}/attachments/${encodeURIComponent(identifier)}`,
+      token,
+    ),
 },
 
 assets: {

@@ -56,9 +56,101 @@ function durationLabelFor(lesson: any): string {
   return '';
 }
 
-// ─────────────────────────────────────────────────────────────
-// Inner component (uses useSearchParams — wrapped in Suspense below)
-// ─────────────────────────────────────────────────────────────
+
+
+const getAttachmentIcon = (att: { mime_type?: string; url: string }) => {
+  const mime = (att.mime_type ?? '').toLowerCase();
+  const url = att.url.toLowerCase();
+
+  if (mime.includes('pdf') || url.endsWith('.pdf')) return '📄';
+  if (
+    mime.includes('word') ||
+    mime.includes('document') ||
+    url.endsWith('.doc') ||
+    url.endsWith('.docx')
+  )
+    return '📝';
+  if (
+    mime.includes('sheet') ||
+    mime.includes('excel') ||
+    url.endsWith('.xls') ||
+    url.endsWith('.xlsx') ||
+    url.endsWith('.csv')
+  )
+    return '📊';
+  if (
+    mime.includes('presentation') ||
+    mime.includes('powerpoint') ||
+    url.endsWith('.ppt') ||
+    url.endsWith('.pptx')
+  )
+    return '📽️';
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.includes('zip') || url.endsWith('.zip') || url.endsWith('.rar')) return '🗜️';
+  if (url.includes('drive.google.com')) return '📁';
+  if (url.includes('github.com')) return '💻';
+  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com'))
+    return '🎬';
+  return '📎';
+};
+
+const formatBytes = (bytes?: number) => {
+  if (!bytes || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
+const LessonAttachments: React.FC<{ attachments?: any[] }> = ({ attachments }) => {
+  if (!Array.isArray(attachments) || attachments.length === 0) return null;
+
+  return (
+    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <Icon name="document" className="w-5 h-5 text-brand-primary" />
+        <h4 className="font-bold text-gray-900 text-sm">
+          Lesson Materials ({attachments.length})
+        </h4>
+      </div>
+      <ul className="space-y-2">
+        {attachments.map((att: any, idx: number) => {
+          const key = att.public_id ?? att.url ?? idx;
+          const isPdf =
+            (att.mime_type ?? '').toLowerCase().includes('pdf') ||
+            (att.url ?? '').toLowerCase().endsWith('.pdf');
+          return (
+            <li key={key}>
+              <a
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-brand-primary hover:bg-brand-primary/5 transition-colors group"
+              >
+                <span className="text-2xl flex-shrink-0" aria-hidden>
+                  {getAttachmentIcon(att)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate group-hover:text-brand-primary">
+                    {att.filename || 'Untitled attachment'}
+                  </p>
+                  <p className="text-xs text-brand-muted">
+                    {isPdf ? 'PDF' : att.mime_type?.split('/')?.pop()?.toUpperCase() ?? 'File'}
+                    {att.size ? ` · ${formatBytes(att.size)}` : ''}
+                  </p>
+                </div>
+                <Icon
+                  name="arrowRight"
+                  className="w-4 h-4 text-gray-400 group-hover:text-brand-primary flex-shrink-0"
+                />
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
 const CourseDetailsInner: React.FC<CourseDetailsProps> = ({
   user,
   course,
@@ -366,42 +458,58 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({
     if (isVideo) {
       const yt = getYouTubeEmbed(videoUrl);
       return (
-        <div className="bg-black rounded-xl overflow-hidden shadow-xl">
-          <div className="aspect-video">
-            {yt ? (
-              <iframe
-                key={lesson.id}
-                src={yt}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            ) : (
-              <video
-                key={lesson.id}
-                src={videoUrl}
-                controls
-                className="w-full h-full"
-                onEnded={() => handleVideoEnd(lesson.id)}
-              />
-            )}
+        <div className="space-y-4">
+          {/* 👇 wrapper so video + attachments stack cleanly */}
+          <div className="bg-black rounded-xl overflow-hidden shadow-xl">
+            <div className="aspect-video">
+              {yt ? (
+                <iframe
+                  key={lesson.id}
+                  src={yt}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <video
+                  key={lesson.id}
+                  src={videoUrl}
+                  controls
+                  className="w-full h-full"
+                  onEnded={() => handleVideoEnd(lesson.id)}
+                />
+              )}
+            </div>
+            <div className="p-4 bg-white border-t border-gray-100">
+              <h4 className="font-bold text-gray-900">{lesson.title}</h4>
+              <p className="text-sm text-brand-muted mt-1">
+                {durationLabelFor(lesson)}
+              </p>
+            </div>
           </div>
-          <div className="p-4 bg-white border-t border-gray-100">
-            <h4 className="font-bold text-gray-900">{lesson.title}</h4>
-            <p className="text-sm text-brand-muted mt-1">{durationLabelFor(lesson)}</p>
-          </div>
+
+          {/* 👇 NEW — attachments under the video */}
+          <LessonAttachments attachments={lesson.attachments} />
         </div>
       );
     }
     return (
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h3 className="text-xl font-bold text-gray-900 mb-3">{lesson.title}</h3>
-        <div
-          className="prose prose-sm max-w-none text-gray-700"
-          dangerouslySetInnerHTML={{
-            __html: lesson.content || lesson.text_content || '<em>No content yet.</em>',
-          }}
-        />
+      <div className="space-y-4">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <h3 className="text-xl font-bold text-gray-900 mb-3">{lesson.title}</h3>
+          <div
+            className="prose prose-sm max-w-none text-gray-700"
+            dangerouslySetInnerHTML={{
+              __html:
+                lesson.content ||
+                lesson.text_content ||
+                '<em>No content yet.</em>',
+            }}
+          />
+        </div>
+
+        {/* 👇 NEW — attachments under the text content */}
+        <LessonAttachments attachments={lesson.attachments} />
       </div>
     );
   };
@@ -545,7 +653,15 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({
                               </span>
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-xs text-gray-500">{durationLabelFor(lesson)}</span>
+                            <span className="text-xs text-gray-500">{durationLabelFor(lesson)}</span>
+{Array.isArray(lesson.attachments) && lesson.attachments.length > 0 && (
+  <span
+    className="inline-flex items-center gap-1 text-xs text-brand-muted bg-gray-100 px-2 py-0.5 rounded-full"
+    title={`${lesson.attachments.length} attachment${lesson.attachments.length === 1 ? '' : 's'}`}
+  >
+    📎 {lesson.attachments.length}
+  </span>
+)}
                               {!isOwnerOrAdmin && (
                                 <div
                                   className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors cursor-pointer ${
