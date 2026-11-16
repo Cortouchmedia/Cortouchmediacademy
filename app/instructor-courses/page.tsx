@@ -15,6 +15,7 @@ export default function InstructorCoursesPage() {
     handleProjectAdd, handleProjectDelete,
     handleAIGrade, handleApproveGrade,
     handleLessonWithFiles,
+    handleCourseDelete, // 👈 Imported Delete Function
   } = useAppContext();
   const router = useRouter();
 
@@ -32,6 +33,7 @@ export default function InstructorCoursesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewingCourse, setPreviewingCourse] = useState<any>(null);
+  
   // ⬇️ NOW it's safe to return early
   if (!currentUser || currentUser.role !== 'instructor') return null;
 
@@ -55,7 +57,7 @@ export default function InstructorCoursesPage() {
     );
   }
 
-if (previewingCourse) {
+  if (previewingCourse) {
     return (
       <PreviewCourse
         course={previewingCourse}
@@ -70,7 +72,7 @@ if (previewingCourse) {
   }
 
   const instructorCourses = courses.filter(
-    (c: any) => c.instructor_id === currentUser.id || c.instructor === currentUser.name,
+    (c: any) => String(c.instructor_id) === String(currentUser.id) || c.instructor === currentUser.name,
   );
 
   const addModuleField = () => setInitialModules([...initialModules, { title: '' }]);
@@ -116,6 +118,7 @@ if (previewingCourse) {
       setIsSubmitting(false);
     }
   };
+  
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -134,21 +137,36 @@ if (previewingCourse) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {instructorCourses.map((course) => (
-          <div key={course.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer group">
+          <div key={course.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow cursor-pointer group flex flex-col">
             <div className="relative h-48" onClick={() => {
               handleCourseSelect(course);
               router.push(`/course/${course.id}`);
             }}>
               <img src={course.imageUrl} alt={course.title} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              
+              {/* 👈 Status Badge */}
+              <div className="absolute top-2 right-2">
+                {course.is_published ? (
+                  <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider">
+                    Published
+                  </span>
+                ) : (
+                  <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider">
+                    Draft
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="p-6">
+            
+            <div className="p-6 flex-1 flex flex-col">
               <h3 className="font-bold text-gray-900 text-lg mb-2 line-clamp-1">{course.title}</h3>
               <div className="flex justify-between items-center text-sm text-gray-500">
                 <span>{course.enrollmentCount.toLocaleString()} students</span>
                 <span className="font-bold text-green-600">Active</span>
               </div>
-              <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2">
+              
+              <div className="mt-4 pt-4 border-t border-gray-100 flex gap-2 mt-auto">
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -160,21 +178,40 @@ if (previewingCourse) {
                   Edit
                 </button>
                 <button 
-  onClick={(e) => {
-    e.stopPropagation();
-    setPreviewingCourse(course);
-  }}
-  className="flex-1 py-2 bg-[#219BD5] text-white font-bold rounded-lg hover:bg-[#1a7fb0] transition-all"
->
-  View
-</button>
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewingCourse(course);
+                  }}
+                  className="flex-1 py-2 bg-[#219BD5] text-white font-bold rounded-lg hover:bg-[#1a7fb0] transition-all"
+                >
+                  View
+                </button>
+                
+                {/* 👈 DELETE BUTTON */}
+                <button 
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Are you sure you want to delete "${course.title}"? This cannot be undone.`)) {
+                      try {
+                        await handleCourseDelete(course.id);
+                      } catch (err) {
+                        alert('Failed to delete course. Please try again.');
+                      }
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-50 text-red-600 font-bold rounded-lg hover:bg-red-100 transition-all flex items-center justify-center"
+                  title="Delete Course"
+                >
+                  <Icon name="trash" className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
         ))}
+        
         <div 
           onClick={() => setIsAddingCourse(true)}
-          className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center p-12 text-center hover:border-[#219BD5] transition-all cursor-pointer"
+          className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center p-12 text-center hover:border-[#219BD5] transition-all cursor-pointer min-h-[300px]"
         >
           <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
             <span className="text-2xl text-[#219BD5]">+</span>
@@ -305,28 +342,28 @@ if (previewingCourse) {
               </div>
 
               {error && (
-  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-    {error}
-  </div>
-)}
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+                  {error}
+                </div>
+              )}
 
-<div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-gray-100">
-  <button
-    type="button"
-    onClick={() => setIsAddingCourse(false)}
-    disabled={isSubmitting}
-    className="flex-1 py-3 bg-gray-100 text-gray-900 font-bold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
-  >
-    Cancel
-  </button>
-  <button
-    type="submit"
-    disabled={isSubmitting}
-    className="flex-1 py-3 bg-[#219BD5] text-white font-bold rounded-xl hover:bg-[#1a7fb0] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {isSubmitting ? 'Creating…' : 'Create Course'}
-  </button>
-</div>
+              <div className="pt-4 flex gap-3 sticky bottom-0 bg-white py-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCourse(false)}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-gray-100 text-gray-900 font-bold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-[#219BD5] text-white font-bold rounded-xl hover:bg-[#1a7fb0] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'Creating…' : 'Create Course'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

@@ -291,8 +291,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
     (async () => {
       try {
+        // 👈 FIX: Allow instructors to see drafts too
         const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
-        const url = isAdmin ? `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses?includeDrafts=true` : `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses`;
+        const isInstructor = currentUser?.role === 'instructor';
+        const includeDrafts = isAdmin || isInstructor;
+        
+        const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses${includeDrafts ? '?includeDrafts=true' : ''}`;
         
         // 👈 Using raw fetch with cache: 'no-store' to FORCE fresh data
         const res = await fetch(url, { cache: 'no-store' });
@@ -468,8 +472,12 @@ useEffect(() => {
 
    const refreshCourses = async () => {
     try {
+      // 👈 FIX: Allow instructors to see drafts too
       const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
-      const url = isAdmin ? `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses?includeDrafts=true` : `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses`;
+      const isInstructor = currentUser?.role === 'instructor';
+      const includeDrafts = isAdmin || isInstructor;
+      
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cortouchmediacademy-production.up.railway.app/api'}/courses${includeDrafts ? '?includeDrafts=true' : ''}`;
       
       const res = await fetch(url, { cache: 'no-store' });
       const allCourses = await res.json();
