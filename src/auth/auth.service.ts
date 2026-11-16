@@ -16,7 +16,99 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
-  // 👈 Helper function to save audit logs to Supabase
+  // ============================================================
+  // OAUTH METHODS (Google & Facebook)
+  // ============================================================
+
+  async getOAuthUrl(provider: 'google' | 'facebook', redirectTo: string) {
+    if (provider !== 'google' && provider !== 'facebook') {
+      throw new BadRequestException('Invalid OAuth provider');
+    }
+
+    const supabase = this.supabaseService.getClient();
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: provider,
+      options: {
+        redirectTo: redirectTo,
+      },
+    });
+
+    if (error) {
+      this.logger.error(`OAuth URL generation failed: ${error.message}`);
+      throw new BadRequestException(error.message);
+    }
+
+    return { url: data.url };
+  }
+
+  async signinWithOAuth(token: string) {
+    const supabase = this.supabaseService.getClient();
+    
+    // Verify the token sent from the frontend callback
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      this.logger.error(`OAuth signin failed: ${error?.message}`);
+      throw new UnauthorizedException("Invalid OAuth token");
+    }
+
+    // Check if profile exists
+    const supabaseAdmin = this.supabaseService.getAdminClient();
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    // If it's their first time logging in via social, create the profile
+    if (!profile) {
+      const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'New User';
+      const role = user.user_metadata?.role || 'STUDENT'; // Default to student
+      
+      await this.createUserProfile(user.id, user.email!, fullName, role);
+      
+      await this.saveAuditLog(
+        user.id,
+        "User Registration (OAuth)",
+        "user",
+        `${fullName} created an account via ${user.app_metadata.provider}.`,
+      );
+      
+      await this.mailService.sendWelcomeEmail(user.email!, fullName);
+    } else {
+       await this.saveAuditLog(
+          user.id,
+          "User Login (OAuth)",
+          "auth",
+          `${profile.full_name || user.email} logged in via ${user.app_metadata.provider}.`,
+        );
+    }
+
+    return {
+      message: "OAuth signin successful",
+      user: user,
+    };
+  }
+
+  async getProfile(userId: string) {
+    const supabaseAdmin = this.supabaseService.getAdminClient();
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      throw new UnauthorizedException("Profile not found");
+    }
+    return data;
+  }
+
+  // ============================================================
+  // EMAIL/PASSWORD METHODS
+  // ============================================================
+
   private async saveAuditLog(
     userId: string | undefined,
     action: string,
@@ -133,7 +225,7 @@ export class AuthService {
           `${full_name} (${email}) created an account as ${role}.`,
         );
 
-        // 👈 Send the welcome email
+        // Send the welcome email
         await this.mailService.sendWelcomeEmail(email, full_name);
       }
 
@@ -198,7 +290,7 @@ export class AuthService {
           `${email} successfully logged in.`,
         );
 
-        // 👈 Send the login notification email
+        // Send the login notification email
         const displayName =
           data.user.user_metadata?.full_name || data.user.email || "there";
 
@@ -264,6 +356,16 @@ export class AuthService {
         return null;
       }
 
+      // Check if profile exists to prevent overwriting an Admin to Student
+      const { data: existingProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+
+      // If they exist, don't downgrade their role
+      const finalRole = existingProfile ? existingProfile.role : role;
+
       const { data, error } = await supabaseAdmin
         .from("profiles")
         .upsert(
@@ -271,7 +373,7 @@ export class AuthService {
             id: userId,
             email: email,
             full_name: full_name,
-            role: role,
+            role: finalRole,
             updated_at: new Date().toISOString(),
           },
           {

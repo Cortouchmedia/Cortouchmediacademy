@@ -36,6 +36,34 @@ export class AuthController {
     return { message: 'Auth endpoint is working' };
   }
 
+  // ==================== OAUTH ENDPOINTS ====================
+
+  @Get('oauth/:provider')
+  async getOAuthUrl(
+    @Param('provider') provider: string,
+    @Query('redirectTo') redirectTo: string,
+  ) {
+    if (!redirectTo) {
+      throw new BadRequestException('redirectTo query parameter is required');
+    }
+    return this.authService.getOAuthUrl(provider as 'google' | 'facebook', redirectTo);
+  }
+
+  @Post('oauth-callback')
+  async signinWithOAuth(@Body('token') token: string) {
+    if (!token) {
+      throw new BadRequestException('Token is required');
+    }
+    return this.authService.signinWithOAuth(token);
+  }
+
+  @Get('profile/:id')
+  async getProfileById(@Param('id') id: string) {
+    return this.authService.getProfile(id);
+  }
+
+  // ==================== EMAIL/PASSWORD ENDPOINTS ====================
+
   @Post('signup')
   async signup(@Body() registerDto: RegisterDto) {
     this.logger.log('Signup endpoint called');
