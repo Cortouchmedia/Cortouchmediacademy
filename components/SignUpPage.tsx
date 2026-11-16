@@ -48,6 +48,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'student' | 'instructor'>('student');
   const [isLoading, setIsLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -68,8 +69,6 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
     setIsLoading(true);
 
     try {
-      console.log('🔵 signup fired', { email, role });
-
       // 1. Create the account
       const result = await Api.auth.signup({
         email,
@@ -81,8 +80,6 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
       const user = (result as any)?.user;
       const session = (result as any)?.session;
 
-      console.log('🟢 signup result', { hasUser: !!user, hasSession: !!session });
-
       // Email confirmation required → no session yet
       if (!session && user) {
         setSuccess(
@@ -93,9 +90,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
       }
 
       // 2. Sign in with the new credentials
-      console.log('🟢 auto-login after signup');
       const loginResult = await handleLogin(email, password);
-      console.log('🟢 handleLogin result:', loginResult);
 
       if (!loginResult.success) {
         setError(loginResult.error ?? 'Signup succeeded but auto-login failed');
@@ -110,19 +105,37 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
       const storedUser = userStr ? JSON.parse(userStr) : null;
       const userRole = storedUser?.role ?? 'student';
 
-      console.log('🟡 redirecting with role:', userRole);
-
       if (userRole === 'instructor') router.push('/instructor-dashboard');
       else if (userRole === 'admin') router.push('/admin');
       else router.push('/student-dashboard');
     } catch (err) {
-      console.error('🔴 signup error:', err);
+      console.error('signup error:', err);
       if (err instanceof ApiError) {
         setError(err.message || 'Signup failed');
       } else {
         setError('Network error. Please try again.');
       }
       setIsLoading(false);
+    }
+  };
+
+  // 👈 Handle OAuth Signup/Login
+  const handleOAuthLogin = async (provider: 'google' | 'facebook') => {
+    try {
+      setError(null);
+      setSuccess(null);
+      setOauthLoading(provider);
+      
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const { url } = await Api.auth.getOAuthUrl(provider, redirectTo);
+      
+      // Redirect the user to Google/Facebook
+      window.location.href = url;
+      
+    } catch (err: any) {
+      console.error(`${provider} signup failed`, err);
+      setError(err?.message || `Could not connect to ${provider}. Please try again.`);
+      setOauthLoading(null);
     }
   };
 
@@ -145,6 +158,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
             <button
               type="button"
               onClick={() => setRole('student')}
+              disabled={isLoading || !!oauthLoading}
               className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${
                 role === 'student'
                   ? 'bg-[#219BD5] text-white border-[#219BD5]'
@@ -156,6 +170,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
             <button
               type="button"
               onClick={() => setRole('instructor')}
+              disabled={isLoading || !!oauthLoading}
               className={`flex-1 py-2 text-sm font-bold rounded-lg border transition-all ${
                 role === 'instructor'
                   ? 'bg-[#219BD5] text-white border-[#219BD5]'
@@ -174,7 +189,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
               placeholder="Alex Morgan"
               value={fullName}
               onChange={setFullName}
-              disabled={isLoading}
+              disabled={isLoading || !!oauthLoading}
             />
             <FormInput
               label="Email Address"
@@ -183,7 +198,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
               placeholder="you@example.com"
               value={email}
               onChange={setEmail}
-              disabled={isLoading}
+              disabled={isLoading || !!oauthLoading}
             />
             <FormInput
               label="Password"
@@ -192,7 +207,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
               placeholder="••••••••"
               value={password}
               onChange={setPassword}
-              disabled={isLoading}
+              disabled={isLoading || !!oauthLoading}
             />
 
             {error && (
@@ -208,7 +223,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
 
             <button
               type="submit"
-              disabled={isLoading || !email || !password || !fullName}
+              disabled={isLoading || !!oauthLoading || !email || !password || !fullName}
               className="w-full px-4 py-3 bg-brand-primary text-white font-bold rounded-lg hover:bg-opacity-80 transition-colors flex justify-center items-center disabled:bg-opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
@@ -245,21 +260,32 @@ export const SignUpPage: React.FC<SignUpPageProps> = () => {
           </div>
 
           <div className="space-y-4">
+            {/* 👈 Google Button */}
             <button
               type="button"
-              disabled
-              className="w-full flex justify-center items-center gap-3 px-4 py-3 bg-white text-gray-400 font-semibold rounded-lg border border-gray-300 cursor-not-allowed opacity-60"
+              onClick={() => handleOAuthLogin('google')}
+              disabled={isLoading || !!oauthLoading}
+              className="w-full flex justify-center items-center gap-3 px-4 py-3 bg-white text-gray-700 font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-60"
             >
-              <Icon name="google" className="w-5 h-5" />
-              Sign Up with Google (coming soon)
+              <img 
+                src="https://www.svgrepo.com/show/475656/google-color.svg" 
+                alt="Google" 
+                className="w-5 h-5" 
+              />
+              {oauthLoading === 'google' ? 'Connecting...' : 'Sign Up with Google'}
             </button>
+
+            {/* 👈 Facebook Button */}
             <button
               type="button"
-              disabled
-              className="w-full flex justify-center items-center gap-3 px-4 py-3 bg-[#1877F2] text-white font-semibold rounded-lg cursor-not-allowed opacity-60"
+              onClick={() => handleOAuthLogin('facebook')}
+              disabled={isLoading || !!oauthLoading}
+              className="w-full flex justify-center items-center gap-3 px-4 py-3 bg-[#1877F2] text-white font-semibold rounded-lg hover:bg-[#166fe5] transition-colors disabled:opacity-60"
             >
-              <Icon name="facebook" className="w-5 h-5" />
-              Sign Up with Facebook (coming soon)
+              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+              {oauthLoading === 'facebook' ? 'Connecting...' : 'Sign Up with Facebook'}
             </button>
           </div>
         </div>

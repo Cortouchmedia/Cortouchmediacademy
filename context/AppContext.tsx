@@ -153,22 +153,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [instructorMessages, setInstructorMessages] = useState<InstructorMessage[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Rehydrate from localStorage
+  // Rehydrate from localStorage OR OAuth cookie
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const storedUser = localStorage.getItem('auth_user');
-    const storedToken = localStorage.getItem('auth_token');
-    if (storedUser && storedToken) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        setCurrentUser(parsed);
-        setIsLoggedIn(true);
-      } catch {
-        localStorage.removeItem('auth_user');
-        localStorage.removeItem('auth_token');
+    
+    const rehydrate = async () => {
+      // 1. Check for the cookie set by the OAuth callback
+      const cookieToken = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('auth_token='))
+        ?.split('=')[1];
+
+      const storedToken = localStorage.getItem('auth_token') || cookieToken;
+      const storedUser = localStorage.getItem('auth_user');
+
+      if (storedToken) {
+        // Ensure the token is saved in localStorage for future requests
+        if (!localStorage.getItem('auth_token')) {
+          localStorage.setItem('auth_token', storedToken);
+        }
+
+        // If we have a user object, just set it
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            setCurrentUser(parsed);
+            setIsLoggedIn(true);
+          } catch {
+            localStorage.removeItem('auth_user');
+          }
+        } else {
+          // 👈 If we have a token (from OAuth) but no user data, fetch the profile
+          try {
+            const profileData = await Api.auth.profile(storedToken);
+            const rawRole = (profileData.profile?.role ?? 'STUDENT').toString().toLowerCase();
+            const role = rawRole === 'superadmin' ? 'superadmin'
+                       : rawRole === 'admin' ? 'admin'
+                       : rawRole === 'instructor' ? 'instructor'
+                       : 'student';
+
+            const realUser = {
+              id: profileData.id,
+              name: profileData.profile?.full_name ?? profileData.email,
+              email: profileData.email,
+              avatarUrl: profileData.profile?.avatar_url ?? '',
+              role: role as User['role'],
+              enrolledCourseIds: [],
+            };
+
+            setCurrentUser(realUser);
+            setIsLoggedIn(true);
+            localStorage.setItem('auth_user', JSON.stringify(realUser));
+          } catch (err) {
+            console.error('Failed to fetch profile during rehydration:', err);
+            // Clean up bad tokens
+            localStorage.removeItem('auth_token');
+            document.cookie = 'auth_token=; Max-Age=0; path=/';
+          }
+        }
       }
-    }
-    setIsHydrated(true);
+      setIsHydrated(true);
+    };
+
+    rehydrate();
   }, []);
 
  
@@ -510,6 +557,7 @@ useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_user');
       localStorage.removeItem('auth_token');
+      document.cookie = 'auth_token=; Max-Age=0; path=/';
     }
   };
 

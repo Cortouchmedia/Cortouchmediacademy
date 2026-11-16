@@ -315,7 +315,10 @@ export const Api = {
       id: string,
       body: { full_name?: string },
       token: string,
+      
     ) => api.put(`/auth/users?id=${id}`, body, token),
+    getOAuthUrl: (provider: 'google' | 'facebook', redirectTo: string) => 
+    api.get<{ url: string }>(`/auth/oauth/${provider}?redirectTo=${encodeURIComponent(redirectTo)}`),
   },
 
  // Courses
