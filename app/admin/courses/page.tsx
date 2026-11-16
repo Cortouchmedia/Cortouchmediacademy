@@ -32,8 +32,10 @@ function CoursesContent() {
     handleCourseDelete,
     handleModuleAdd,
     handleLessonAdd,
-    handleCourseApprove,
+    handleLessonWithFiles,     // 👈 Added
+    handleUpdateLesson,        // 👈 Added
     handleLessonDelete,
+    handleCourseApprove,
     handleWebinarAdd,
     handleWebinarDelete,
     handleInstructorCourseAdd,
@@ -60,36 +62,31 @@ function CoursesContent() {
     return <div className="p-12 text-center text-gray-500 bg-[#f8fafc] min-h-screen">You do not have permission.</div>;
   }
 
-    // Handle Approve Action
-    const handleApprove = async (courseId: string | number) => {
-      const stringId = String(courseId);
-      setApprovingId(stringId);
-  
-      try {
-        await handleCourseApprove(stringId);
-        alert("Course approved successfully! It is now live.");
-        // ✅ No reload — context state update re-renders this page automatically
-      } catch (err: any) {
-        alert(`Failed to approve course: ${err.message}`);
-      } finally {
-        setApprovingId(null);   // ✅ ALWAYS clear the "Approving..." spinner
-      }
-    };
+  const handleApprove = async (courseId: string | number) => {
+    const stringId = String(courseId);
+    setApprovingId(stringId);
 
+    try {
+      await handleCourseApprove(stringId);
+      alert("Course approved successfully! It is now live.");
+    } catch (err: any) {
+      alert(`Failed to approve course: ${err.message}`);
+    } finally {
+      setApprovingId(null);   
+    }
+  };
 
   const filteredCourses = instructorId 
     ? courses.filter(c => String(c.instructor_id) === String(instructorId))
     : courses;
 
-
-    const pendingCourses = filteredCourses.filter(
-      (c) => !c.is_published && c.status?.toUpperCase() !== 'PUBLISHED'
-    );
-    
-    const publishedCourses = filteredCourses.filter(
-      (c) => c.is_published || c.status?.toUpperCase() === 'PUBLISHED'
-    );
-
+  const pendingCourses = filteredCourses.filter(
+    (c) => !c.is_published && c.status?.toUpperCase() !== 'PUBLISHED'
+  );
+  
+  const publishedCourses = filteredCourses.filter(
+    (c) => c.is_published || c.status?.toUpperCase() === 'PUBLISHED'
+  );
 
   // If editing, show the full EditCourse component
   if (editingCourse) {
@@ -100,7 +97,8 @@ function CoursesContent() {
           allCourses={courses}
           onUpdateCourse={handleCourseUpdate}
           onAddModule={handleModuleAdd}
-          onAddLesson={handleLessonAdd}
+          onAddLesson={handleLessonWithFiles} // 👈 Updated to use handleLessonWithFiles
+          onUpdateLesson={handleUpdateLesson} // 👈 Added
           onDeleteLesson={handleLessonDelete}
           onAddWebinar={handleWebinarAdd}
           onDeleteWebinar={handleWebinarDelete}
