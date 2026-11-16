@@ -21,6 +21,18 @@ interface EditCourseProps {
     },
     files?: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
+  ) => Promise<any>; // 👈 CHANGED to Promise<any> to get the response
+  onUpdateLesson: (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+    files?: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
   ) => Promise<void>;
   onDeleteLesson: (courseId: number | string, lessonId: number | string) => Promise<void>;
   onAddWebinar: (courseId: number | string, webinarData: Omit<Webinar, 'id'>) => void;
@@ -98,6 +110,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   onUpdateCourse,
   onAddModule,
   onAddLesson,
+  onUpdateLesson,
   onDeleteLesson,
   onAddWebinar,
   onDeleteWebinar,
@@ -124,12 +137,15 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const [newModuleTitle, setNewModuleTitle] = useState('');
+  
+  // 👇 EDITING STATE
+  const [editingLessonId, setEditingLessonId] = useState<string | number | null>(null);
   const [addingLessonToModuleId, setAddingLessonToModuleId] = useState<number | string | null>(null);
+  
   const [newLessonData, setNewLessonData] = useState(initialLessonState);
   const [newWebinarData, setNewWebinarData] = useState(initialWebinarState);
   const [newProjectData, setNewProjectData] = useState(initialProjectState);
 
-  // 👇 NEW — file + link state for new lesson
   const [newLessonFiles, setNewLessonFiles] = useState<File[]>([]);
   const [newLessonLinks, setNewLessonLinks] = useState<Array<{ filename: string; url: string }>>([]);
   const [linkFilenameInput, setLinkFilenameInput] = useState('');
@@ -149,7 +165,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
   );
 
   useEffect(() => {
-    if (Array.isArray(course?.content) && course.content.length > 0) {
+    if (Array.isArray(course?.content)) {
       setLocalModules(course.content);
     }
   }, [course?.id, course?.content]);
@@ -216,16 +232,46 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     }
   };
 
-  // 👇 UPDATED — now passes files + links
-  const handleAddLesson = async (e: React.FormEvent) => {
+  const handleEditLessonClick = (moduleId: string | number, lesson: any) => {
+    setEditingLessonId(lesson.id);
+    setAddingLessonToModuleId(moduleId);
+    setNewLessonData({
+      title: lesson.title || '',
+      duration: lesson.duration || '',
+      type: lesson.type || 'video',
+      videoUrl: lesson.videoUrl || lesson.video_url || '',
+      content: lesson.content || lesson.text_content || '',
+      description: lesson.description || '',
+      isFree: lesson.isFree || false,
+    });
+    setNewLessonFiles([]); 
+    setNewLessonLinks([]); 
+    setLinkFilenameInput('');
+    setLinkUrlInput('');
+  };
+
+  const resetLessonForm = () => {
+    setAddingLessonToModuleId(null);
+    setEditingLessonId(null);
+    setNewLessonData(initialLessonState);
+    setNewLessonFiles([]);
+    setNewLessonLinks([]);
+    setLinkFilenameInput('');
+    setLinkUrlInput('');
+  };
+
+  const handleSaveLesson = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLessonData.title.trim() || !addingLessonToModuleId) return;
     setError(null);
     setIsSaving(true);
 
     const moduleId = addingLessonToModuleId;
+    const isEditing = !!editingLessonId;
+    const tempId = `local-lesson-${Date.now()}`;
+
     const lessonPayload = {
-      id: `local-lesson-${Date.now()}`,
+      id: isEditing ? editingLessonId : tempId,
       title: newLessonData.title,
       duration: newLessonData.duration,
       type: newLessonData.type,
@@ -233,7 +279,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       content: newLessonData.content,
       description: newLessonData.description,
       isFree: newLessonData.isFree,
-      attachments: [
+      attachments: isEditing ? undefined : [
         ...newLessonLinks.map((l) => ({
           filename: l.filename,
           url: l.url,
@@ -248,44 +294,94 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       __optimistic: true,
     };
 
+    // 1. Show it instantly on screen
     setLocalModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId ? { ...m, lessons: [...(m.lessons ?? []), lessonPayload] } : m,
-      ),
+      prev.map((m) => {
+        if (m.id !== moduleId) return m;
+        const existingLessons = m.lessons ?? [];
+        const updatedLessons = isEditing
+          ? existingLessons.map((l: any) => String(l.id) === String(editingLessonId) ? { ...l, ...lessonPayload } : l)
+          : [...existingLessons, lessonPayload];
+        return { ...m, lessons: updatedLessons };
+      })
     );
 
     try {
-      await onAddLesson(
-        course.id,
-        moduleId,
-        {
-          title: newLessonData.title,
-          duration: newLessonData.duration,
-          type: newLessonData.type,
-          videoUrl: newLessonData.videoUrl,
-          content: newLessonData.content,
-          description: newLessonData.description,
-          durationMinutes: parseInt(newLessonData.duration) || undefined,
-          isFree: newLessonData.isFree,
-        },
-        newLessonFiles.length > 0 ? newLessonFiles : undefined,
-        newLessonLinks.length > 0 ? newLessonLinks : undefined,
-      );
+      if (isEditing) {
+        await onUpdateLesson(
+          course.id,
+          moduleId,
+          editingLessonId,
+          {
+            title: newLessonData.title,
+            duration: newLessonData.duration,
+            type: newLessonData.type,
+            videoUrl: newLessonData.videoUrl,
+            content: newLessonData.content,
+            description: newLessonData.description,
+            durationMinutes: parseInt(newLessonData.duration) || undefined,
+            isFree: newLessonData.isFree,
+          },
+          newLessonFiles.length > 0 ? newLessonFiles : undefined,
+          newLessonLinks.length > 0 ? newLessonLinks : undefined,
+        );
+      } else {
+        // 👈 CAPTURE THE RESPONSE from the backend
+        const response: any = await onAddLesson(
+          course.id,
+          moduleId,
+          {
+            title: newLessonData.title,
+            duration: newLessonData.duration,
+            type: newLessonData.type,
+            videoUrl: newLessonData.videoUrl,
+            content: newLessonData.content,
+            description: newLessonData.description,
+            durationMinutes: parseInt(newLessonData.duration) || undefined,
+            isFree: newLessonData.isFree,
+          },
+          newLessonFiles.length > 0 ? newLessonFiles : undefined,
+          newLessonLinks.length > 0 ? newLessonLinks : undefined,
+        );
+
+        // 👈 SWAP THE TEMP ID FOR THE REAL ID IN LOCAL STATE
+        const realId = response?.id || response?.lesson?.id;
+        if (realId) {
+          setLocalModules((prev) =>
+            prev.map((m) =>
+              m.id === moduleId
+                ? {
+                    ...m,
+                    lessons: (m.lessons ?? []).map((l: any) =>
+                      l.id === tempId ? { ...l, id: realId } : l
+                    ),
+                  }
+                : m
+            )
+          );
+        }
+      }
+      
       logAuditEvent(
-        'Lesson Added',
-        `Added lesson "${newLessonData.title}" to ${course.title}${newLessonFiles.length ? ` with ${newLessonFiles.length} file(s)` : ''}`,
+        isEditing ? 'Lesson Updated' : 'Lesson Added',
+        `${isEditing ? 'Updated' : 'Added'} lesson "${newLessonData.title}" in ${course.title}${newLessonFiles.length ? ` with ${newLessonFiles.length} file(s)` : ''}`,
         'course',
       );
     } catch (err) {
-      console.error('Lesson add failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add lesson');
+      console.error('Lesson save failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save lesson');
+      // Remove the optimistic update if it failed
+      if (!isEditing) {
+        setLocalModules((prev) =>
+          prev.map((m) =>
+            m.id === moduleId
+              ? { ...m, lessons: (m.lessons ?? []).filter((l: any) => l.id !== tempId) }
+              : m
+          )
+        );
+      }
     } finally {
-      setNewLessonData(initialLessonState);
-      setNewLessonFiles([]);
-      setNewLessonLinks([]);
-      setLinkFilenameInput('');
-      setLinkUrlInput('');
-      setAddingLessonToModuleId(null);
+      resetLessonForm();
       setIsSaving(false);
     }
   };
@@ -297,20 +393,18 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     setNewLessonData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 👇 NEW — file picker handler
   const handleLessonFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const incoming = Array.from(e.target.files);
     const combined = [...newLessonFiles, ...incoming].slice(0, 10);
     setNewLessonFiles(combined);
-    e.target.value = ''; // reset input so same file can be re-picked after removal
+    e.target.value = '';
   };
 
   const removeLessonFile = (idx: number) => {
     setNewLessonFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // 👇 NEW — link adder
   const handleAddLink = () => {
     const url = linkUrlInput.trim();
     const name = linkFilenameInput.trim();
@@ -333,7 +427,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     setNewLessonLinks((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // 👇 NEW — delete an existing attachment from a saved lesson
   const handleDeleteAttachment = async (
     lessonId: string | number,
     identifier: string,
@@ -342,7 +435,6 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     if (!confirm('Remove this attachment? This cannot be undone.')) return;
     try {
       await handleLessonAttachmentRemove(lessonId, identifier);
-      // Optimistically update localModules
       setLocalModules((prev) =>
         prev.map((m) =>
           m.id === moduleId
@@ -624,15 +716,18 @@ export const EditCourse: React.FC<EditCourseProps> = ({
               <h3 className="font-bold text-lg text-gray-800">{module.title}</h3>
               <ul className="mt-2 space-y-2 pl-4">
                 {(module.lessons ?? []).map((lesson: any) => {
-                  // 👇 NEW — resolve attachments list
                   const attachments: LessonAttachment[] = Array.isArray(lesson.attachments)
                     ? lesson.attachments
                     : [];
 
                   return (
-                    <li key={lesson.id} className="text-sm text-brand-muted hover:bg-white/50 p-2 rounded-md">
+                    <li key={lesson.id} className="text-sm text-brand-muted hover:bg-white/50 p-2 rounded-md group">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
+                        {/* 👈 Clickable title area to EDIT */}
+                        <div 
+                          className="flex items-center gap-2 min-w-0 cursor-pointer flex-1 hover:text-brand-primary"
+                          onClick={() => handleEditLessonClick(module.id, lesson)}
+                        >
                           <Icon name={lesson.type === 'video' ? 'play' : 'document'} className="w-4 h-4 text-brand-secondary flex-shrink-0" />
                           <span className="truncate">
                             {lesson.title} ({lesson.duration})
@@ -647,8 +742,10 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                             </span>
                           )}
                         </div>
+                        {/* 👇 FIXED DELETE BUTTON */}
                         <button
-                          onClick={async () => {
+                          onClick={async (e) => {
+                            e.stopPropagation();
                             if (!confirm(`Delete lesson "${lesson.title}"?`)) return;
                             setError(null);
                             try {
@@ -666,13 +763,12 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                               setError(err instanceof Error ? err.message : 'Failed to delete lesson');
                             }
                           }}
-                          className="p-1 text-red-500 hover:bg-red-100 rounded-full transition-colors flex-shrink-0"
+                          className="p-1 text-red-500 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded-full transition-all flex-shrink-0"
                         >
                           <Icon name="trash" className="w-4 h-4" />
                         </button>
                       </div>
 
-                      {/* 👇 NEW — existing attachment list with delete buttons */}
                       {attachments.length > 0 && (
                         <ul className="mt-2 ml-6 space-y-1">
                           {attachments.map((att, idx) => {
@@ -714,8 +810,10 @@ export const EditCourse: React.FC<EditCourseProps> = ({
               </ul>
 
               {addingLessonToModuleId === module.id ? (
-                <form onSubmit={handleAddLesson} className="mt-4 p-4 bg-white border border-brand-primary/20 rounded-lg space-y-4">
-                  <h4 className="font-semibold text-gray-800">Add New Lesson</h4>
+                <form onSubmit={handleSaveLesson} className="mt-4 p-4 bg-white border border-brand-primary/20 rounded-lg space-y-4">
+                  <h4 className="font-semibold text-gray-800">
+                    {editingLessonId ? 'Edit Lesson' : 'Add New Lesson'}
+                  </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input type="text" name="title" value={newLessonData.title} onChange={handleNewLessonChange} placeholder="Lesson Title" required className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm" />
@@ -746,110 +844,102 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                     <textarea name="content" value={newLessonData.content} onChange={handleNewLessonChange} placeholder="Lesson text content..." rows={4} className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm" />
                   )}
 
-                  {/* 👇 NEW — Lesson Materials section */}
-                  <div className="border-t border-gray-200 pt-4 space-y-3">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-800 mb-2">
-                        📎 Lesson Materials (optional)
-                      </label>
-                      <p className="text-xs text-gray-500 mb-2">
-                        Upload PDFs, docs, images, or add external links like Google Drive or GitHub.
-                      </p>
-                      <input
-                        type="file"
-                        multiple
-                        onChange={handleLessonFileSelect}
-                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.zip,.txt,image/*"
-                        className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-primary file:text-white file:font-semibold file:cursor-pointer hover:file:bg-brand-primary/90"
-                      />
-                    </div>
+                  {!editingLessonId && (
+                    <div className="border-t border-gray-200 pt-4 space-y-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-800 mb-2">
+                          📎 Lesson Materials (optional)
+                        </label>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Upload PDFs, docs, images, or add external links like Google Drive or GitHub.
+                        </p>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={handleLessonFileSelect}
+                          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.zip,.txt,image/*"
+                          className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-brand-primary file:text-white file:font-semibold file:cursor-pointer hover:file:bg-brand-primary/90"
+                        />
+                      </div>
 
-                    {/* Files queued for upload */}
-                    {newLessonFiles.length > 0 && (
-                      <ul className="space-y-1">
-                        {newLessonFiles.map((f, idx) => (
-                          <li
-                            key={`${f.name}-${idx}`}
-                            className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
-                          >
-                            <span aria-hidden>📄</span>
-                            <span className="flex-1 truncate">{f.name}</span>
-                            <span className="text-gray-400">{formatBytes(f.size)}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeLessonFile(idx)}
-                              className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                      {newLessonFiles.length > 0 && (
+                        <ul className="space-y-1">
+                          {newLessonFiles.map((f, idx) => (
+                            <li
+                              key={`${f.name}-${idx}`}
+                              className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
                             >
-                              <Icon name="x" className="w-3 h-3" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                              <span aria-hidden>📄</span>
+                              <span className="flex-1 truncate">{f.name}</span>
+                              <span className="text-gray-400">{formatBytes(f.size)}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeLessonFile(idx)}
+                                className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                              >
+                                <Icon name="x" className="w-3 h-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
 
-                    {/* Link input + list */}
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        type="text"
-                        placeholder="Link name (e.g., React Docs)"
-                        value={linkFilenameInput}
-                        onChange={(e) => setLinkFilenameInput(e.target.value)}
-                        className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
-                      />
-                      <input
-                        type="url"
-                        placeholder="https://..."
-                        value={linkUrlInput}
-                        onChange={(e) => setLinkUrlInput(e.target.value)}
-                        className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddLink}
-                        className="px-3 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-brand-secondary/90 whitespace-nowrap"
-                      >
-                        + Add Link
-                      </button>
-                    </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          type="text"
+                          placeholder="Link name (e.g., React Docs)"
+                          value={linkFilenameInput}
+                          onChange={(e) => setLinkFilenameInput(e.target.value)}
+                          className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
+                        />
+                        <input
+                          type="url"
+                          placeholder="https://..."
+                          value={linkUrlInput}
+                          onChange={(e) => setLinkUrlInput(e.target.value)}
+                          className="flex-1 bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-3 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddLink}
+                          className="px-3 py-2 bg-brand-secondary text-white text-sm font-semibold rounded-lg hover:bg-brand-secondary/90 whitespace-nowrap"
+                        >
+                          + Add Link
+                        </button>
+                      </div>
 
-                    {newLessonLinks.length > 0 && (
-                      <ul className="space-y-1">
-                        {newLessonLinks.map((l, idx) => (
-                          <li
-                            key={`${l.url}-${idx}`}
-                            className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
-                          >
-                            <span aria-hidden>🔗</span>
-                            <span className="truncate flex-1">
-                              {l.filename} — <span className="text-gray-500">{l.url}</span>
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => removeLessonLink(idx)}
-                              className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                      {newLessonLinks.length > 0 && (
+                        <ul className="space-y-1">
+                          {newLessonLinks.map((l, idx) => (
+                            <li
+                              key={`${l.url}-${idx}`}
+                              className="flex items-center gap-2 text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1"
                             >
-                              <Icon name="x" className="w-3 h-3" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                              <span aria-hidden>🔗</span>
+                              <span className="truncate flex-1">
+                                {l.filename} — <span className="text-gray-500">{l.url}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeLessonLink(idx)}
+                                className="text-red-500 hover:bg-red-100 rounded-full p-0.5"
+                              >
+                                <Icon name="x" className="w-3 h-3" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex gap-2">
                     <button type="submit" disabled={isSaving} className="px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-opacity-80 disabled:opacity-50">
-                      {isSaving ? 'Saving…' : 'Save Lesson'}
+                      {isSaving ? 'Saving…' : (editingLessonId ? 'Update Lesson' : 'Save Lesson')}
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setAddingLessonToModuleId(null);
-                        setNewLessonData(initialLessonState);
-                        setNewLessonFiles([]);
-                        setNewLessonLinks([]);
-                        setLinkFilenameInput('');
-                        setLinkUrlInput('');
-                      }}
+                      onClick={resetLessonForm}
                       className="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-lg hover:bg-gray-300"
                     >
                       Cancel
@@ -1075,7 +1165,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
         </form>
       </div>
 
-      {/* Submissions Review Modal — unchanged, kept as-is */}
+      {/* Submissions Review Modal */}
       {reviewingProjectId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-4xl my-8 shadow-2xl">

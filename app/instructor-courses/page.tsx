@@ -15,7 +15,8 @@ export default function InstructorCoursesPage() {
     handleProjectAdd, handleProjectDelete,
     handleAIGrade, handleApproveGrade,
     handleLessonWithFiles,
-    handleCourseDelete, // 👈 Imported Delete Function
+    handleUpdateLesson, // 👈 Imported Update Function
+    handleCourseDelete,
   } = useAppContext();
   const router = useRouter();
 
@@ -45,6 +46,7 @@ export default function InstructorCoursesPage() {
         onUpdateCourse={handleCourseUpdate}
         onAddModule={handleModuleAdd}
         onAddLesson={handleLessonWithFiles} 
+        onUpdateLesson={handleUpdateLesson} // 👈 Passed down to EditCourse
         onDeleteLesson={handleLessonDelete}
         onAddWebinar={handleWebinarAdd}
         onDeleteWebinar={handleWebinarDelete}

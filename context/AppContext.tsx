@@ -82,6 +82,20 @@ interface AppContextType {
     linkAttachments?: Array<{ filename: string; url: string }>,
   ) => Promise<void>;
 
+  // 👈 ADDED Update Lesson
+  handleUpdateLesson: (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+    files?: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
+  ) => Promise<void>;
+
   handleLessonAttachmentAdd: (
     lessonId: string | number,
     payload: { link?: { filename: string; url: string }; files?: File[] },
@@ -1162,7 +1176,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     },
     files: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
-  ): Promise<void> => {
+  ): Promise<any> => { // 👈 Change to Promise<any> so we get the response back
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
 
@@ -1170,7 +1184,8 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     const moduleObj = course?.content?.find((m) => String(m.id) === String(moduleId));
     const order_number = moduleObj?.lessons?.length ?? 0;
 
-    await Api.courses.createLesson(
+    // 👈 Capture the response from the API
+    const response = await Api.courses.createLesson(
       String(moduleId),
       {
         title: lessonData.title,
@@ -1182,14 +1197,54 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
         is_free: lessonData.isFree ?? false,
         attachments: linkAttachments,
       },
-      files,
+      files || [], // 👈 Force an empty array if undefined
       token,
     );
 
     await refreshCourses();
     logAuditEvent(
       'Lesson Added',
-      `Added lesson "${lessonData.title}" with ${files.length} file(s)`,
+      `Added lesson "${lessonData.title}" with ${(files || []).length} file(s)`,
+      'course',
+    );
+
+    return response; 
+  };
+
+  const handleUpdateLesson = async (
+    courseId: number | string,
+    moduleId: number | string,
+    lessonId: number | string,
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+      description?: string;
+      durationMinutes?: number;
+      isFree?: boolean;
+    },
+    files?: File[],
+    linkAttachments?: Array<{ filename: string; url: string }>,
+  ): Promise<void> => {
+    const token = authStorage.getToken();
+    if (!token || !currentUser) throw new Error('Not signed in');
+
+    await Api.courses.updateLesson(
+      String(lessonId),
+      {
+        title: lessonData.title,
+        description: lessonData.description,
+        video_url: lessonData.videoUrl,
+        video_duration: lessonData.durationMinutes,
+        text_content: lessonData.content,
+        is_free: lessonData.isFree ?? false,
+        attachments: linkAttachments,
+      },
+      files || [], // 👈 Force an empty array if undefined
+      token,
+    );
+
+    await refreshCourses();
+    logAuditEvent(
+      'Lesson Updated',
+      `Updated lesson "${lessonData.title}"`,
       'course',
     );
   };
@@ -1425,7 +1480,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
     handleCourseUpdate, handleCourseDelete, handleCourseApprove, handleModuleAdd, handleLessonAdd, handleLessonDelete,
-    handleLessonWithFiles, handleLessonAttachmentAdd, handleLessonAttachmentRemove,
+    handleLessonWithFiles, handleUpdateLesson, handleLessonAttachmentAdd, handleLessonAttachmentRemove, // 👈 Added handleUpdateLesson
     handleWebinarAdd, handleWebinarDelete, handleWebinarRegister,
     handleProjectAdd, handleProjectDelete,
     handleProjectSubmitWithFiles, handleAIGrade, handleApproveGrade,

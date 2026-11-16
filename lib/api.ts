@@ -390,7 +390,7 @@ export const Api = {
     if (fields.resource_url) fd.append('resource_url', fields.resource_url);
     if (fields.attachments && fields.attachments.length > 0)
       fd.append('attachments', JSON.stringify(fields.attachments));
-    files.forEach((file) => fd.append('files', file));
+    (files || []).forEach((file) => fd.append('files', file)); // 👈 FIXED
 
     return apiUpload<CourseLesson>(
       `/courses/modules/${moduleId}/lessons`,
@@ -436,7 +436,7 @@ export const Api = {
       fd.append('resource_url', fields.resource_url);
     if (fields.attachments !== undefined)
       fd.append('attachments', JSON.stringify(fields.attachments));
-    files.forEach((file) => fd.append('files', file));
+    (files || []).forEach((file) => fd.append('files', file)); // 👈 FIXED
 
     return apiUploadWithMethod<CourseLesson>(
       `/courses/lessons/${lessonId}`,
