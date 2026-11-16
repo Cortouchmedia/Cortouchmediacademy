@@ -1,23 +1,20 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/utils/supabase/server'; // 👈 Use the new helper
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') ?? '/dashboard';
+  const next = searchParams.get('next') ?? '/student-dashboard'; // 👈 Default to student dashboard
 
   if (code) {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+    const supabase = createClient();
 
-    // 1. Exchange the OAuth code for a Supabase session
+    // Exchange the code for a session (PKCE cookie is read automatically)
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.session) {
-      // 2. Tell YOUR backend that this user just logged in via OAuth
       try {
+        // Sync with your NestJS backend
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/oauth-callback`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -27,7 +24,6 @@ export async function GET(request: Request) {
         if (res.ok) {
           const response = NextResponse.redirect(`${origin}${next}`);
           
-          // Set the auth cookie
           response.cookies.set('auth_token', data.session.access_token, {
             path: '/',
             maxAge: 60 * 60 * 24 * 7, // 1 week

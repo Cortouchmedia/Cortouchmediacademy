@@ -78,17 +78,36 @@ export const SignInPage: React.FC = () => {
     }
   };
 
-  // 👈 Handle OAuth Login
   const handleOAuthLogin = async (provider: 'google' | 'facebook') => {
     try {
       setError(null);
       setOauthLoading(provider);
       
+      // Import the Supabase client directly
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: {
+            flowType: 'pkce', // 👈 Forces PKCE
+            detectSessionInUrl: true,
+          }
+        }
+      );
+
       const redirectTo = `${window.location.origin}/auth/callback`;
-      const { url } = await Api.auth.getOAuthUrl(provider, redirectTo);
       
-      // Redirect the user to Google/Facebook
-      window.location.href = url;
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: { redirectTo },
+      });
+
+      if (error) throw error;
+      
+      if (data?.url) {
+        window.location.href = data.url;
+      }
       
     } catch (err: any) {
       console.error(`${provider} login failed`, err);
