@@ -47,6 +47,11 @@ interface AppContextType {
   handleEnrollmentSuccess: (courseId: number | string) => Promise<void>;
   handleToggleLessonComplete: (courseId: number | string, lessonId: number | string) => void;
   handleLessonProgressToggle: (lessonId: string | number, isCompleted: boolean) => Promise<void>;
+  handleLessonProgress: (
+    courseId: number | string,
+    lessonId: number | string,
+    payload: { position: number },
+  ) => Promise<void>;
   handleSendMessage: (text: string) => Promise<void>;
   handleSendCourseMessage: (courseId: number | string, text: string) => Promise<void>;
   logAuditEvent: (action: string, details: string, type: AuditLog['type']) => void;
@@ -780,69 +785,93 @@ useEffect(() => {
     if (!token) return;
   
     try {
+      // 1. Save to backend
       await api.patch(
         `/courses/progress?userId=${currentUser.id}`,
         { lesson_id: String(lessonId), is_completed: isCompleted },
         token,
       );
   
-      // Re-sync enrollments AND certificates from the server
-      const enrollmentsData: any = await Api.courses.userEnrollments(
-        currentUser.id,
-        token,
-      );
-      const enrollList = Array.isArray(enrollmentsData)
-        ? enrollmentsData
-        : enrollmentsData?.data ?? [];
-
-      // 👈 Fetch certificates too
-      let certList: any[] = [];
-      if (currentUser.role === 'student') {
-        try {
-          const certsData: any = await Api.certificates.mine(currentUser.id, token);
-          certList = Array.isArray(certsData) ? certsData : certsData?.data ?? [];
-        } catch (e) {}
-      }
-
-      const certByCourse = new Map<string, any>();
-      certList.forEach((c: any) => certByCourse.set(String(c.course_id), c));
-  
-      const meta: Record<string, { 
-        progress: number; 
-        completed: boolean; 
-        certificate: any | null;
-        enrollmentId: string;
-      }> = {};
-      
-      enrollList.forEach((e: any) => {
-        const cid = String(e.course_id);
-        const pct = Math.round(Number(e.progress_percentage ?? 0));
-        const cert = certByCourse.get(cid) || null;
-        meta[cid] = { 
-          progress: pct, 
-          completed: !!cert,
-          certificate: cert,
-          enrollmentId: e.id,
-        };
-      });
-  
+      // 2. Instantly update the UI so the checkmark turns green
       setCourses((prev) =>
         prev.map((c) => {
-          const m = meta[String(c.id)];
-          return m ? { 
-            ...c, 
-            progress: m.progress, 
-            completed: m.completed,
-            certificate: m.certificate,
-            enrollmentId: m.enrollmentId,
-          } as any : c;
-        }),
+          let hasLesson = false;
+          const updatedContent = c.content?.map((m: any) => ({
+            ...m,
+            lessons: m.lessons?.map((l: any) => {
+              if (String(l.id) === String(lessonId)) {
+                hasLesson = true;
+                return { ...l, isCompleted };
+              }
+              return l;
+            })
+          }));
+
+          if (!hasLesson) return c;
+
+          const totalLessons = updatedContent.reduce((acc: number, m: any) => acc + m.lessons.length, 0);
+          const completedLessons = updatedContent.reduce(
+            (acc: number, m: any) => acc + m.lessons.filter((l: any) => l.isCompleted).length, 0
+          );
+          const courseProgress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+          return { ...c, content: updatedContent, progress: courseProgress } as any;
+        })
       );
+
     } catch (err) {
       console.error('Lesson progress update failed:', err);
     }
   };
 
+  const handleLessonProgress = async (
+    courseId: number | string,
+    lessonId: number | string,
+    payload: { position: number },
+  ): Promise<void> => {
+    if (!currentUser) return;
+    const token = authStorage.getToken();
+    if (!token) return;
+  
+    // Look up the current completion state so we don't accidentally wipe it
+    const course = courses.find((c) => String(c.id) === String(courseId));
+    const lesson = course?.content
+      .flatMap((m) => m.lessons)
+      .find((l) => String(l.id) === String(lessonId));
+    const isCompleted = !!lesson?.isCompleted;
+  
+    try {
+      await api.patch(
+        `/courses/progress?userId=${currentUser.id}`,
+        {
+          lesson_id: String(lessonId),
+          is_completed: isCompleted,             // 👈 preserve — don't wipe
+          last_watched_position: payload.position,
+        },
+        token,
+      );
+  
+      // Update local resume position only
+      setCourses((prev) =>
+        prev.map((c) => {
+          if (String(c.id) !== String(courseId)) return c;
+          return {
+            ...c,
+            content: c.content.map((m) => ({
+              ...m,
+              lessons: m.lessons.map((l) =>
+                String(l.id) === String(lessonId)
+                  ? { ...l, last_watched_position: payload.position }
+                  : l,
+              ),
+            })),
+          };
+        }),
+      );
+    } catch (err) {
+      console.warn('Lesson progress save failed:', err);
+    }
+  };
  
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
@@ -1169,84 +1198,87 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
   const handleLessonWithFiles = async (
     courseId: number | string,
     moduleId: number | string,
-    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+    lessonData: {
+      title: string;
+      video_duration?: number;
+      video_url?: string;
+      text_content?: string;
       description?: string;
-      durationMinutes?: number;
-      isFree?: boolean;
+      is_free?: boolean;
     },
     files: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
-  ): Promise<any> => { // 👈 Change to Promise<any> so we get the response back
+  ): Promise<any> => {
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
-
+  
     const course = courses.find((c) => String(c.id) === String(courseId));
     const moduleObj = course?.content?.find((m) => String(m.id) === String(moduleId));
     const order_number = moduleObj?.lessons?.length ?? 0;
-
-    // 👈 Capture the response from the API
+  
+    // ✅ FIX: pass through directly — EditCourse already sends backend-shaped keys
     const response = await Api.courses.createLesson(
       String(moduleId),
       {
         title: lessonData.title,
         description: lessonData.description,
-        video_url: lessonData.videoUrl,
-        video_duration: lessonData.durationMinutes,
-        text_content: lessonData.content,
+        video_url: lessonData.video_url,
+        video_duration: lessonData.video_duration,
+        text_content: lessonData.text_content,
         order_number,
-        is_free: lessonData.isFree ?? false,
+        is_free: lessonData.is_free ?? false,
         attachments: linkAttachments,
       },
-      files || [], // 👈 Force an empty array if undefined
+      files || [],
       token,
     );
-
+  
     await refreshCourses();
     logAuditEvent(
       'Lesson Added',
       `Added lesson "${lessonData.title}" with ${(files || []).length} file(s)`,
       'course',
     );
-
-    return response; 
+  
+    return response;
   };
 
   const handleUpdateLesson = async (
     courseId: number | string,
     moduleId: number | string,
     lessonId: number | string,
-    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
+    lessonData: {
+      title: string;
+      video_duration?: number;
+      video_url?: string;
+      text_content?: string;
       description?: string;
-      durationMinutes?: number;
-      isFree?: boolean;
+      is_free?: boolean;
     },
     files?: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
   ): Promise<void> => {
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
-
+  
+    // ✅ FIX: pass through directly
     await Api.courses.updateLesson(
       String(lessonId),
       {
         title: lessonData.title,
         description: lessonData.description,
-        video_url: lessonData.videoUrl,
-        video_duration: lessonData.durationMinutes,
-        text_content: lessonData.content,
-        is_free: lessonData.isFree ?? false,
+        video_url: lessonData.video_url,
+        video_duration: lessonData.video_duration,
+        text_content: lessonData.text_content,
+        is_free: lessonData.is_free ?? false,
         attachments: linkAttachments,
       },
-      files || [], // 👈 Force an empty array if undefined
+      files || [],
       token,
     );
-
+  
     await refreshCourses();
-    logAuditEvent(
-      'Lesson Updated',
-      `Updated lesson "${lessonData.title}"`,
-      'course',
-    );
+    logAuditEvent('Lesson Updated', `Updated lesson "${lessonData.title}"`, 'course');
   };
 
   const handleLessonAttachmentAdd = async (
@@ -1476,7 +1508,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     setCompletedCourse, setIsChatOpen, setIsBotTyping, setMessages, setSearchQuery, setLanguage,
     handleLogin, handleLogout, handleNavigate, handleCourseSelect, handleSearchChange,
     handleUserUpdate, handleUserDelete, handleUserAdd,
-    handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle,
+    handleEnrollmentSuccess, handleToggleLessonComplete, handleLessonProgressToggle, handleLessonProgress, 
     handleSendMessage, handleSendCourseMessage, logAuditEvent,
     handleInstructorCourseAdd, handleInstructorMessageSend, handlePayoutRequest,
     handleCourseUpdate, handleCourseDelete, handleCourseApprove, handleModuleAdd, handleLessonAdd, handleLessonDelete,

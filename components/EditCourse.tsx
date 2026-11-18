@@ -103,6 +103,25 @@ const formatBytes = (bytes?: number) => {
   return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 };
 
+// Parse "1:20" → 1.333, "1.33" → 1.33, "1" → 1, "0:45" → 0.75
+const parseDurationToMinutes = (val: string): number | undefined => {
+  if (!val) return undefined;
+  const trimmed = String(val).trim();
+  
+  // mm:ss or hh:mm:ss
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').map(Number);
+    if (parts.some(p => isNaN(p))) return undefined;
+    if (parts.length === 2) return parts[0] + (parts[1] || 0) / 60;
+    if (parts.length === 3) return parts[0] * 60 + parts[1] + (parts[2] || 0) / 60;
+    return undefined;
+  }
+  
+  // Decimal or whole minutes
+  const n = parseFloat(trimmed);
+  return isNaN(n) || n <= 0 ? undefined : n;
+};
+
 export const EditCourse: React.FC<EditCourseProps> = ({
   course,
   allCourses,
@@ -264,12 +283,21 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     e.preventDefault();
     if (!newLessonData.title.trim() || !addingLessonToModuleId) return;
     setError(null);
-    setIsSaving(true);
-
+  
     const moduleId = addingLessonToModuleId;
     const isEditing = !!editingLessonId;
     const tempId = `local-lesson-${Date.now()}`;
-
+  
+    // ✅ FIX: parse duration up-front and validate
+    const durationMinutes = parseDurationToMinutes(newLessonData.duration);
+    if (newLessonData.duration.trim() && durationMinutes === undefined) {
+      setError(
+        'Duration is not valid. Use decimal minutes (1.25) or mm:ss (1:15).',
+      );
+      return;
+    }
+  
+    // Optimistic local row (keeps the human-readable "1:15" in the UI)
     const lessonPayload = {
       id: isEditing ? editingLessonId : tempId,
       title: newLessonData.title,
@@ -279,72 +307,67 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       content: newLessonData.content,
       description: newLessonData.description,
       isFree: newLessonData.isFree,
-      attachments: isEditing ? undefined : [
-        ...newLessonLinks.map((l) => ({
-          filename: l.filename,
-          url: l.url,
-        })),
-        ...newLessonFiles.map((f) => ({
-          filename: f.name,
-          url: '', // placeholder until refresh
-          mime_type: f.type,
-          size: f.size,
-        })),
-      ],
+      attachments: isEditing
+        ? undefined
+        : [
+            ...newLessonLinks.map((l) => ({ filename: l.filename, url: l.url })),
+            ...newLessonFiles.map((f) => ({
+              filename: f.name,
+              url: '',
+              mime_type: f.type,
+              size: f.size,
+            })),
+          ],
       __optimistic: true,
     };
-
+  
+    setIsSaving(true);
+  
     // 1. Show it instantly on screen
     setLocalModules((prev) =>
       prev.map((m) => {
         if (m.id !== moduleId) return m;
         const existingLessons = m.lessons ?? [];
         const updatedLessons = isEditing
-          ? existingLessons.map((l: any) => String(l.id) === String(editingLessonId) ? { ...l, ...lessonPayload } : l)
+          ? existingLessons.map((l: any) =>
+              String(l.id) === String(editingLessonId)
+                ? { ...l, ...lessonPayload }
+                : l,
+            )
           : [...existingLessons, lessonPayload];
         return { ...m, lessons: updatedLessons };
-      })
+      }),
     );
-
+  
+    // ✅ FIX: backend-shaped payload — exactly the fields the service whitelist allows
+    const backendPayload = {
+      title: newLessonData.title,
+      video_duration: durationMinutes, // number (or undefined if blank)
+      description: newLessonData.description,
+      video_url: newLessonData.videoUrl,
+      text_content: newLessonData.content,
+      is_free: newLessonData.isFree,
+    };
+  
     try {
       if (isEditing) {
         await onUpdateLesson(
           course.id,
           moduleId,
           editingLessonId,
-          {
-            title: newLessonData.title,
-            duration: newLessonData.duration,
-            type: newLessonData.type,
-            videoUrl: newLessonData.videoUrl,
-            content: newLessonData.content,
-            description: newLessonData.description,
-            durationMinutes: parseInt(newLessonData.duration) || undefined,
-            isFree: newLessonData.isFree,
-          },
+          backendPayload as any,
           newLessonFiles.length > 0 ? newLessonFiles : undefined,
           newLessonLinks.length > 0 ? newLessonLinks : undefined,
         );
       } else {
-        // 👈 CAPTURE THE RESPONSE from the backend
         const response: any = await onAddLesson(
           course.id,
           moduleId,
-          {
-            title: newLessonData.title,
-            duration: newLessonData.duration,
-            type: newLessonData.type,
-            videoUrl: newLessonData.videoUrl,
-            content: newLessonData.content,
-            description: newLessonData.description,
-            durationMinutes: parseInt(newLessonData.duration) || undefined,
-            isFree: newLessonData.isFree,
-          },
+          backendPayload as any,
           newLessonFiles.length > 0 ? newLessonFiles : undefined,
           newLessonLinks.length > 0 ? newLessonLinks : undefined,
         );
-
-        // 👈 SWAP THE TEMP ID FOR THE REAL ID IN LOCAL STATE
+  
         const realId = response?.id || response?.lesson?.id;
         if (realId) {
           setLocalModules((prev) =>
@@ -353,31 +376,35 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                 ? {
                     ...m,
                     lessons: (m.lessons ?? []).map((l: any) =>
-                      l.id === tempId ? { ...l, id: realId } : l
+                      l.id === tempId ? { ...l, id: realId } : l,
                     ),
                   }
-                : m
-            )
+                : m,
+            ),
           );
         }
       }
-      
+  
       logAuditEvent(
         isEditing ? 'Lesson Updated' : 'Lesson Added',
-        `${isEditing ? 'Updated' : 'Added'} lesson "${newLessonData.title}" in ${course.title}${newLessonFiles.length ? ` with ${newLessonFiles.length} file(s)` : ''}`,
+        `${isEditing ? 'Updated' : 'Added'} lesson "${newLessonData.title}" in ${course.title}${
+          newLessonFiles.length ? ` with ${newLessonFiles.length} file(s)` : ''
+        }`,
         'course',
       );
     } catch (err) {
       console.error('Lesson save failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to save lesson');
-      // Remove the optimistic update if it failed
       if (!isEditing) {
         setLocalModules((prev) =>
           prev.map((m) =>
             m.id === moduleId
-              ? { ...m, lessons: (m.lessons ?? []).filter((l: any) => l.id !== tempId) }
-              : m
-          )
+              ? {
+                  ...m,
+                  lessons: (m.lessons ?? []).filter((l: any) => l.id !== tempId),
+                }
+              : m,
+          ),
         );
       }
     } finally {
@@ -385,6 +412,7 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       setIsSaving(false);
     }
   };
+  
 
   const handleNewLessonChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,

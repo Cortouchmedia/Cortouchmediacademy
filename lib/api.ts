@@ -475,17 +475,13 @@ export const Api = {
     );
   },
 
-  /**
-   * Remove a single attachment by its Cloudinary public_id OR its URL.
-   * The identifier is URL-encoded so slashes in public_id survive.
-   */
   removeLessonAttachment: (
     lessonId: string,
     identifier: string,
     token: string,
   ) =>
     api.delete<CourseLesson>(
-      `/courses/lessons/${lessonId}/attachments/${encodeURIComponent(identifier)}`,
+      `/courses/lessons/${lessonId}/attachments?identifier=${encodeURIComponent(identifier)}`,
       token,
     ),
 },
