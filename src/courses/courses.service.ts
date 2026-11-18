@@ -720,6 +720,8 @@ export class CoursesService {
     files?: MulterFile[],
     isAdmin: boolean = false,
   ) {
+    console.log("🔥🔥🔥 BACKEND RECEIVED:", JSON.stringify(updateData));    
+
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
