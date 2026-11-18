@@ -50,33 +50,109 @@ export class CoursesController {
     return role === "ADMIN" || role === "SUPERADMIN" || role === "SUPER_ADMIN";
   }
 
-  /**
-   * Multipart form-data sends everything as strings, so coerce
-   * `attachments`, `is_free`, `order_number`, `video_duration`.
-   */
-  private normalizeLessonBody(body: any) {
-    const out: any = { ...body };
+ /**
+ * Multipart form-data sends everything as strings, so coerce
+ * `attachments`, `is_free`, `order_number`, `video_duration`.
+ * Also accepts "mm:ss" / "hh:mm:ss" for video_duration so legacy
+ * clients (or a stray EditCourse.tsx that hasn't been updated) still work.
+ */
+private normalizeLessonBody(body: any) {
+  const out: any = { ...body };
 
-    if (typeof out.attachments === "string") {
-      try {
-        out.attachments = JSON.parse(out.attachments);
-      } catch {
-        out.attachments = [];
-      }
+  if (typeof out.attachments === "string") {
+    try {
+      out.attachments = JSON.parse(out.attachments);
+    } catch {
+      out.attachments = [];
     }
-
-    if (typeof out.is_free === "string") {
-      out.is_free = out.is_free === "true";
-    }
-    if (typeof out.order_number === "string") {
-      out.order_number = Number(out.order_number);
-    }
-    if (typeof out.video_duration === "string") {
-      out.video_duration = Number(out.video_duration);
-    }
-
-    return out;
   }
+
+  if (typeof out.is_free === "string") {
+    out.is_free = out.is_free === "true";
+  }
+  if (typeof out.order_number === "string") {
+    out.order_number = Number(out.order_number);
+  }
+
+
+if (out.video_duration !== undefined && out.video_duration !== null) {
+  out.video_duration = this.parseDurationToMinutes(out.video_duration);
+
+
+  if (
+    out.video_duration !== undefined &&
+    (out.video_duration < 0 || out.video_duration > 24 * 60)
+  ) {
+    throw new BadRequestException(
+      "video_duration must be between 0 and 1440 minutes (24 hours)",
+    );
+  }
+}
+
+  return out;
+}
+
+/**
+ * Accepts:
+ *   "1:15"     → 1.25   (mm:ss)
+ *   "1:02:30"  → 62.5   (hh:mm:ss)
+ *   "1.25"     → 1.25   (already decimal)
+ *   1.25       → 1.25   (number)
+ *   ""         → undefined (field omitted)
+ * Garbage → throws 400 (we don't silently coerce to 0).
+ */
+private parseDurationToMinutes(input: string | number): number | undefined {
+  if (input === "" || input === null || input === undefined) {
+    return undefined;
+  }
+
+  if (typeof input === "number") {
+    if (!Number.isFinite(input) || input < 0) {
+      throw new BadRequestException(
+        `Invalid video_duration: ${input}`,
+      );
+    }
+    return input;
+  }
+
+  const str = String(input).trim();
+
+  // plain decimal like "1.25"
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    return Number(str);
+  }
+
+  // "mm:ss" or "hh:mm:ss"
+  const parts = str.split(":").map((p) => Number(p));
+  if (parts.some((p) => Number.isNaN(p) || p < 0)) {
+    throw new BadRequestException(
+      `Invalid video_duration: "${input}". Use decimal minutes or mm:ss.`,
+    );
+  }
+
+  if (parts.length === 2) {
+  
+    if (parts[1] >= 60) {
+      throw new BadRequestException(
+        `Invalid video_duration: "${input}". Seconds must be < 60.`,
+      );
+    }
+    return parts[0] + parts[1] / 60;
+  }
+  if (parts.length === 3) {
+   
+    if (parts[1] >= 60 || parts[2] >= 60) {
+      throw new BadRequestException(
+        `Invalid video_duration: "${input}". Minutes and seconds must be < 60.`,
+      );
+    }
+    return parts[0] * 60 + parts[1] + parts[2] / 60;
+  }
+
+  throw new BadRequestException(
+    `Invalid video_duration: "${input}". Use decimal minutes or mm:ss.`,
+  );
+}
 
   // ==================== PUBLIC ROUTES ====================
 
@@ -381,28 +457,33 @@ export class CoursesController {
     );
   }
 
-  @Delete("lessons/:lessonId/attachments/:identifier")
-  @UseGuards(SupabaseAuthGuard)
-  async removeLessonAttachment(
-    @Param("lessonId") lessonId: string,
-    @Param("identifier") identifier: string,
-    @CurrentUser() user: AuthUser,
-  ) {
-    const isAdmin = this.isAdmin(user);
-    const role = (user.role ?? "").toUpperCase();
-    if (!isAdmin && role !== "INSTRUCTOR") {
-      throw new ForbiddenException(
-        "Only instructors or admins can modify lessons",
-      );
-    }
-    return this.coursesService.removeLessonAttachment(
-      lessonId,
-      user.id,
-      decodeURIComponent(identifier),
-      isAdmin,
+  @Delete("lessons/:lessonId/attachments")
+async removeLessonAttachment(
+  @Param("lessonId") lessonId: string,
+  @Query("identifier") identifier: string,
+  @CurrentUser() user: AuthUser,
+) {
+  const isAdmin = this.isAdmin(user);
+  const role = (user.role ?? "").toUpperCase();
+  if (!isAdmin && role !== "INSTRUCTOR") {
+    throw new ForbiddenException(
+      "Only instructors or admins can modify lessons",
     );
   }
 
+  if (!identifier || identifier.trim() === "") {
+    throw new BadRequestException(
+      "identifier query param is required (public_id or url of the attachment)",
+    );
+  }
+
+  return this.coursesService.removeLessonAttachment(
+    lessonId,
+    user.id,
+    identifier,
+    isAdmin,
+  );
+}
   // ==================== STUDENT ROUTES ====================
 
   @Post("enroll")

@@ -29,17 +29,92 @@ export class CoursesService {
     private readonly cloudinaryService: CloudinaryService,
   ) {}
 
+  // ==================== SHARED HELPERS ====================
+
+  // ✅ FIX: Shared helpers so course/module/lesson whitelists stay consistent
+  private static readonly LESSON_FIELDS = [
+    "title",
+    "description",
+    "order_number",
+    "video_url",
+    "video_duration",
+    "text_content",
+    "is_free",
+    "resource_url",
+  ] as const;
+
+  private static readonly COURSE_FIELDS = [
+    "title",
+    "description",
+    "category",
+    "level",
+    "price",
+    "thumbnail_url",
+    "preview_video_url",
+    "learning_outcomes",
+    "requirements",
+    "target_audience",
+    "language",
+    "status",
+    "is_published",
+  ] as const;
+
+  private static readonly MODULE_FIELDS = [
+    "title",
+    "description",
+    "order_number",
+  ] as const;
+
+  /**
+   * ✅ FIX: Generic whitelist builder.
+   * Copies only known fields, drops anything else.
+   */
+  private buildWhitelistedPayload(
+    source: any,
+    allowed: readonly string[],
+  ): Record<string, any> {
+    const payload: Record<string, any> = {};
+    for (const key of allowed) {
+      if (source[key] !== undefined) {
+        payload[key] = source[key];
+      }
+    }
+    return payload;
+  }
+
+  /**
+   * ✅ FIX: Normalize video_duration to a number and throw
+   * a clear 400 instead of silently corrupting the DB.
+   */
+  private normalizeVideoDuration(payload: Record<string, any>) {
+    if (payload.video_duration !== undefined) {
+      const parsed = Number(payload.video_duration);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        throw new BadRequestException(
+          `video_duration must be a non-negative number (received "${payload.video_duration}")`,
+        );
+      }
+      payload.video_duration = parsed;
+    }
+  }
+
   // ==================== COURSE MANAGEMENT ====================
 
   async createCourse(instructorId: string, createCourseDto: any) {
     const supabase = this.supabaseService.getAdminClient();
 
+    // ✅ FIX: Whitelist course fields instead of ...createCourseDto
+    const payload = this.buildWhitelistedPayload(
+      createCourseDto,
+      CoursesService.COURSE_FIELDS,
+    );
+
     const { data, error } = await supabase
       .from("courses")
       .insert({
-        ...createCourseDto,
+        ...payload,
         instructor_id: instructorId,
-        status: createCourseDto.status || "DRAFT",
+        status: payload.status || "DRAFT",
         is_published: false,
         created_at: new Date(),
         updated_at: new Date(),
@@ -218,7 +293,7 @@ export class CoursesService {
     const allLessons = modules?.flatMap((m) => m.lessons) || [];
     const totalLessons = allLessons.length;
     const totalDuration = allLessons.reduce(
-      (sum, lesson) => sum + (lesson.video_duration || 0),
+      (sum, lesson) => sum + (Number(lesson.video_duration) || 0),
       0,
     );
 
@@ -282,13 +357,22 @@ export class CoursesService {
       );
     }
 
+    // ✅ FIX: Whitelist instead of ...updateCourseDto
+    const payload = this.buildWhitelistedPayload(
+      updateCourseDto,
+      CoursesService.COURSE_FIELDS,
+    );
+
+    payload.updated_at = new Date();
+    if (updateCourseDto.is_published !== undefined) {
+      payload.published_at = updateCourseDto.is_published
+        ? new Date()
+        : null;
+    }
+
     const { data, error } = await supabase
       .from("courses")
-      .update({
-        ...updateCourseDto,
-        updated_at: new Date(),
-        published_at: updateCourseDto.is_published ? new Date() : undefined,
-      })
+      .update(payload)
       .eq("id", courseId)
       .select()
       .single();
@@ -490,10 +574,16 @@ export class CoursesService {
       );
     }
 
+    // ✅ FIX: Whitelist module fields
+    const payload = this.buildWhitelistedPayload(
+      createModuleDto,
+      CoursesService.MODULE_FIELDS,
+    );
+
     const { data, error } = await supabase
       .from("course_modules")
       .insert({
-        ...createModuleDto,
+        ...payload,
         course_id: courseId,
       })
       .select()
@@ -540,9 +630,16 @@ export class CoursesService {
       );
     }
 
+    // ✅ FIX: Whitelist instead of raw updateData
+    const payload = this.buildWhitelistedPayload(
+      updateData,
+      CoursesService.MODULE_FIELDS,
+    );
+    payload.updated_at = new Date();
+
     const { data, error } = await supabase
       .from("course_modules")
-      .update(updateData)
+      .update(payload)
       .eq("id", moduleId)
       .select()
       .single();
@@ -693,11 +790,18 @@ export class CoursesService {
       createLessonDto.resource_url ??
       (uploadedAttachments.length > 0 ? uploadedAttachments[0].url : null);
 
+    // ✅ FIX: Whitelist lesson fields instead of ...createLessonDto
+    const payload = this.buildWhitelistedPayload(
+      createLessonDto,
+      CoursesService.LESSON_FIELDS,
+    );
+    this.normalizeVideoDuration(payload);
+
     const { data, error } = await supabase
       .from("course_lessons")
       .insert({
         id: lessonId,
-        ...createLessonDto,
+        ...payload,
         module_id: moduleId,
         attachments: mergedAttachments,
         resource_url: resourceUrl,
@@ -720,7 +824,8 @@ export class CoursesService {
     files?: MulterFile[],
     isAdmin: boolean = false,
   ) {
-    console.log("🔥🔥🔥 BACKEND RECEIVED:", JSON.stringify(updateData));    
+    // ✅ FIX: Replaced console.log with logger.debug
+    this.logger.debug(`updateLesson payload: ${JSON.stringify(updateData)}`);
 
     const supabase = this.supabaseService.getAdminClient();
 
@@ -772,14 +877,22 @@ export class CoursesService {
       mergedAttachments = [...existing, ...callerProvided, ...uploaded];
     }
 
+    // ✅ FIX: Use shared whitelist (includes video_duration)
+    const payload = this.buildWhitelistedPayload(
+      updateData,
+      CoursesService.LESSON_FIELDS,
+    );
+    this.normalizeVideoDuration(payload);
+
+    if (mergedAttachments !== undefined) {
+      payload.attachments = mergedAttachments;
+    }
+
+    payload.updated_at = new Date();
+
     const { data, error } = await supabase
       .from("course_lessons")
-      .update({
-        ...updateData,
-        ...(mergedAttachments !== undefined
-          ? { attachments: mergedAttachments }
-          : {}),
-      })
+      .update(payload)
       .eq("id", lessonId)
       .select()
       .single();
@@ -1011,28 +1124,28 @@ export class CoursesService {
 
   async enrollInCourse(userId: string, courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
-  
+
     const { data: existing } = await supabase
       .from("course_enrollments")
       .select("id")
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .maybeSingle();
-  
+
     if (existing) {
       throw new BadRequestException("Already enrolled in this course");
     }
-  
+
     const { data: course } = await supabase
       .from("courses")
       .select("id, status")
       .eq("id", courseId)
       .single();
-  
+
     if (!course || course.status !== "PUBLISHED") {
       throw new BadRequestException("Course is not available for enrollment");
     }
-  
+
     const { data, error } = await supabase
       .from("course_enrollments")
       .insert({
@@ -1043,12 +1156,12 @@ export class CoursesService {
       })
       .select()
       .single();
-  
+
     if (error) {
       this.logger.error(`Failed to enroll: ${error.message}`);
       throw new BadRequestException(`Failed to enroll: ${error.message}`);
     }
-  
+
     return data;
   }
 
@@ -1150,7 +1263,7 @@ export class CoursesService {
         description: lesson.description,
         order_number: lesson.order_number,
         video_url: lesson.video_url,
-        video_duration: lesson.video_duration,
+        video_duration: Number(lesson.video_duration) || 0,
         text_content: lesson.text_content,
         is_free: lesson.is_free,
         attachments: lesson.attachments ?? [],
@@ -1186,16 +1299,16 @@ export class CoursesService {
 
   async updateLessonProgress(userId: string, progressDto: any) {
     const supabase = this.supabaseService.getAdminClient();
-  
+
     const { data: existing } = await supabase
       .from("user_lesson_progress")
-      .select("id, completed_at")                     // 👈 added completed_at
+      .select("id, completed_at")
       .eq("user_id", userId)
       .eq("lesson_id", progressDto.lesson_id)
       .maybeSingle();
-  
+
     let result;
-  
+
     if (existing) {
       const { data, error } = await supabase
         .from("user_lesson_progress")
@@ -1203,14 +1316,14 @@ export class CoursesService {
           is_completed: progressDto.is_completed,
           last_watched_position: progressDto.last_watched_position || 0,
           completed_at: progressDto.is_completed
-            ? (existing.completed_at ?? new Date())   // 👈 preserve original date
+            ? existing.completed_at ?? new Date()
             : null,
           updated_at: new Date(),
         })
         .eq("id", existing.id)
         .select()
         .single();
-  
+
       result = { data, error };
     } else {
       const { data, error } = await supabase
@@ -1224,18 +1337,18 @@ export class CoursesService {
         })
         .select()
         .single();
-  
+
       result = { data, error };
     }
-  
+
     if (result.error) {
       throw new BadRequestException(
         `Failed to update progress: ${result.error.message}`,
       );
     }
-  
+
     await this.updateCourseProgress(userId, progressDto.lesson_id);
-  
+
     return result.data;
   }
 
