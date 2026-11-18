@@ -47,7 +47,7 @@ export class CoursesController {
   // 🔥 Helper — case-insensitive admin check
   private isAdmin(user: AuthUser): boolean {
     const role = (user.role ?? "").toUpperCase();
-    return role === "ADMIN" || role === "SUPERADMIN";
+    return role === "ADMIN" || role === "SUPERADMIN" || role === "SUPER_ADMIN";
   }
 
   /**
@@ -95,38 +95,21 @@ export class CoursesController {
     });
   }
 
-  @Get(":id")
-  async getCourseById(@Param("id") id: string) {
-    return this.coursesService.getCourseById(id);
-  }
-
-  @Get(":id/reviews")
-  async getCourseReviews(@Param("id") id: string) {
-    return this.coursesService.getCourseReviews(id);
-  }
-
-  // ==================== ADMIN APPROVAL ROUTES ====================
-
-  @Put(":id/approve")
-  @UseGuards(SupabaseAuthGuard, AdminGuard)
-  async approveCourse(@Param("id") id: string) {
-    return this.coursesService.approveCourse(id);
-  }
-
-  @Put(":id/reject")
-  @UseGuards(SupabaseAuthGuard, AdminGuard)
-  async rejectCourse(@Param("id") id: string) {
-    return this.coursesService.rejectCourse(id);
-  }
-
   // ==================== INSTRUCTOR / ADMIN COURSE ROUTES ====================
+  // (declared BEFORE ':id' so they don't get swallowed by the param route)
 
   @Post()
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async createCourse(
     @Body() createCourseDto: CreateCourseDto,
     @CurrentUser() user: AuthUser,
   ) {
+    const role = (user.role ?? "").toUpperCase();
+    if (!this.isAdmin(user) && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can create courses",
+      );
+    }
     return this.coursesService.createCourse(user.id, createCourseDto);
   }
 
@@ -156,13 +139,36 @@ export class CoursesController {
   }
 
   @Delete(":id")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async deleteCourse(
     @Param("id") id: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.deleteCourse(id, user.id);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can delete courses",
+      );
+    }
+    return this.coursesService.deleteCourse(id, user.id, isAdmin);
   }
+
+  // ==================== ADMIN APPROVAL ROUTES ====================
+
+  @Put(":id/approve")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  async approveCourse(@Param("id") id: string) {
+    return this.coursesService.approveCourse(id);
+  }
+
+  @Put(":id/reject")
+  @UseGuards(SupabaseAuthGuard, AdminGuard)
+  async rejectCourse(@Param("id") id: string) {
+    return this.coursesService.rejectCourse(id);
+  }
+
+  // ==================== INSTRUCTOR-SCOPED READ ROUTES ====================
 
   @Get("instructor/:instructorId/courses")
   @UseGuards(SupabaseAuthGuard)
@@ -188,40 +194,90 @@ export class CoursesController {
     return this.coursesService.getInstructorStudents(instructorId);
   }
 
-  // Module routes
-  @Post("courses/:courseId/modules")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @Get("instructor/:instructorId/recent-enrollments")
+  @UseGuards(SupabaseAuthGuard)
+  async getRecentEnrollments(
+    @Param("instructorId") instructorId: string,
+    @Query("limit") limit: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (user.id !== instructorId && !this.isAdmin(user)) {
+      throw new ForbiddenException("You can only view your own enrollments");
+    }
+    return this.coursesService.getRecentEnrollments(
+      instructorId,
+      limit ? Number(limit) : 5,
+    );
+  }
+
+  // ==================== MODULE ROUTES ====================
+  // NOTE: these are absolute paths relative to "api/courses", so the full
+  // URLs are /api/courses/:courseId/modules and /api/courses/modules/:moduleId
+
+  @Post(":courseId/modules")
+  @UseGuards(SupabaseAuthGuard)
   async addModule(
     @Param("courseId") courseId: string,
     @Body() createModuleDto: CreateModuleDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.addModule(courseId, user.id, createModuleDto);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can add modules",
+      );
+    }
+    return this.coursesService.addModule(
+      courseId,
+      user.id,
+      createModuleDto,
+      isAdmin,
+    );
   }
 
   @Put("modules/:moduleId")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async updateModule(
     @Param("moduleId") moduleId: string,
     @Body() updateData: any,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.updateModule(moduleId, user.id, updateData);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can update modules",
+      );
+    }
+    return this.coursesService.updateModule(
+      moduleId,
+      user.id,
+      updateData,
+      isAdmin,
+    );
   }
 
   @Delete("modules/:moduleId")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async deleteModule(
     @Param("moduleId") moduleId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.deleteModule(moduleId, user.id);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can delete modules",
+      );
+    }
+    return this.coursesService.deleteModule(moduleId, user.id, isAdmin);
   }
 
   // ==================== LESSON ROUTES (with file uploads) ====================
 
   @Post("modules/:moduleId/lessons")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   @UseInterceptors(FilesInterceptor("files", 10))
   async addLesson(
     @Param("moduleId") moduleId: string,
@@ -229,16 +285,24 @@ export class CoursesController {
     @UploadedFiles() files: MulterFile[],
     @CurrentUser() user: AuthUser,
   ) {
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can add lessons",
+      );
+    }
     return this.coursesService.addLesson(
       moduleId,
       user.id,
       this.normalizeLessonBody(body),
       files,
+      isAdmin,
     );
   }
 
   @Put("lessons/:lessonId")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   @UseInterceptors(FilesInterceptor("files", 10))
   async updateLesson(
     @Param("lessonId") lessonId: string,
@@ -246,33 +310,42 @@ export class CoursesController {
     @UploadedFiles() files: MulterFile[],
     @CurrentUser() user: AuthUser,
   ) {
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can update lessons",
+      );
+    }
     return this.coursesService.updateLesson(
       lessonId,
       user.id,
       this.normalizeLessonBody(body),
       files,
+      isAdmin,
     );
   }
 
   @Delete("lessons/:lessonId")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async deleteLesson(
     @Param("lessonId") lessonId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.coursesService.deleteLesson(lessonId, user.id);
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can delete lessons",
+      );
+    }
+    return this.coursesService.deleteLesson(lessonId, user.id, isAdmin);
   }
 
   // ==================== LESSON ATTACHMENTS (standalone) ====================
 
-  /**
-   * Add a link and/or files to an existing lesson.
-   * multipart fields:
-   *   link_filename, link_url   (optional — for link-only attachments)
-   *   files                      (optional — 1..10 files)
-   */
   @Post("lessons/:lessonId/attachments")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   @UseInterceptors(FilesInterceptor("files", 10))
   async addLessonAttachment(
     @Param("lessonId") lessonId: string,
@@ -280,6 +353,14 @@ export class CoursesController {
     @UploadedFiles() files: MulterFile[],
     @CurrentUser() user: AuthUser,
   ) {
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can modify lessons",
+      );
+    }
+
     const hasFiles = !!files && files.length > 0;
     const link =
       body?.link_url && body?.link_filename
@@ -292,24 +373,33 @@ export class CoursesController {
       );
     }
 
-    return this.coursesService.addLessonAttachment(lessonId, user.id, {
-      link,
-      files,
-    });
+    return this.coursesService.addLessonAttachment(
+      lessonId,
+      user.id,
+      { link, files },
+      isAdmin,
+    );
   }
 
   @Delete("lessons/:lessonId/attachments/:identifier")
-  @UseGuards(SupabaseAuthGuard, InstructorGuard)
+  @UseGuards(SupabaseAuthGuard)
   async removeLessonAttachment(
     @Param("lessonId") lessonId: string,
     @Param("identifier") identifier: string,
     @CurrentUser() user: AuthUser,
   ) {
-    // identifier can be a Cloudinary public_id (contains slashes) or a URL.
+    const isAdmin = this.isAdmin(user);
+    const role = (user.role ?? "").toUpperCase();
+    if (!isAdmin && role !== "INSTRUCTOR") {
+      throw new ForbiddenException(
+        "Only instructors or admins can modify lessons",
+      );
+    }
     return this.coursesService.removeLessonAttachment(
       lessonId,
       user.id,
       decodeURIComponent(identifier),
+      isAdmin,
     );
   }
 
@@ -349,22 +439,6 @@ export class CoursesController {
     return this.coursesService.getCourseProgress(userId, courseId);
   }
 
-  @Get("instructor/:instructorId/recent-enrollments")
-  @UseGuards(SupabaseAuthGuard)
-  async getRecentEnrollments(
-    @Param("instructorId") instructorId: string,
-    @Query("limit") limit: string | undefined,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (user.id !== instructorId && !this.isAdmin(user)) {
-      throw new ForbiddenException("You can only view your own enrollments");
-    }
-    return this.coursesService.getRecentEnrollments(
-      instructorId,
-      limit ? Number(limit) : 5,
-    );
-  }
-
   @Patch("progress")
   @UseGuards(SupabaseAuthGuard)
   async updateProgress(
@@ -381,5 +455,17 @@ export class CoursesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.coursesService.addReview(user.id, createReviewDto);
+  }
+
+  // ==================== PUBLIC PARAM ROUTES (must be LAST) ====================
+
+  @Get(":id")
+  async getCourseById(@Param("id") id: string) {
+    return this.coursesService.getCourseById(id);
+  }
+
+  @Get(":id/reviews")
+  async getCourseReviews(@Param("id") id: string) {
+    return this.coursesService.getCourseReviews(id);
   }
 }

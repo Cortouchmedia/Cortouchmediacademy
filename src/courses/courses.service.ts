@@ -364,14 +364,19 @@ export class CoursesService {
     return { message: "Course set to draft", course: data };
   }
 
-  async deleteCourse(courseId: string, instructorId: string) {
+  async deleteCourse(
+    courseId: string,
+    instructorId: string,
+    isAdmin: boolean = false,
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const { error } = await supabase
-      .from("courses")
-      .delete()
-      .eq("id", courseId)
-      .eq("instructor_id", instructorId);
+    let query = supabase.from("courses").delete().eq("id", courseId);
+    if (!isAdmin) {
+      query = query.eq("instructor_id", instructorId);
+    }
+
+    const { error } = await query;
 
     if (error) {
       this.logger.error(`Failed to delete course: ${error.message}`);
@@ -465,15 +470,19 @@ export class CoursesService {
     courseId: string,
     instructorId: string,
     createModuleDto: any,
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const { data: course, error: courseError } = await supabase
+    let courseQuery = supabase
       .from("courses")
       .select("id")
-      .eq("id", courseId)
-      .eq("instructor_id", instructorId)
-      .single();
+      .eq("id", courseId);
+    if (!isAdmin) {
+      courseQuery = courseQuery.eq("instructor_id", instructorId);
+    }
+
+    const { data: course, error: courseError } = await courseQuery.single();
 
     if (courseError || !course) {
       throw new NotFoundException(
@@ -498,7 +507,12 @@ export class CoursesService {
     return data;
   }
 
-  async updateModule(moduleId: string, instructorId: string, updateData: any) {
+  async updateModule(
+    moduleId: string,
+    instructorId: string,
+    updateData: any,
+    isAdmin: boolean = false,
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: module, error: moduleError } = await supabase
@@ -517,7 +531,10 @@ export class CoursesService {
       .eq("id", module.course_id)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to modify this module",
       );
@@ -540,7 +557,11 @@ export class CoursesService {
     return data;
   }
 
-  async deleteModule(moduleId: string, instructorId: string) {
+  async deleteModule(
+    moduleId: string,
+    instructorId: string,
+    isAdmin: boolean = false,
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: module, error: moduleError } = await supabase
@@ -559,7 +580,10 @@ export class CoursesService {
       .eq("id", module.course_id)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to delete this module",
       );
@@ -582,10 +606,6 @@ export class CoursesService {
 
   // ==================== ATTACHMENT HELPERS ====================
 
-  /**
-   * Uploads a set of files to Cloudinary under a course/lesson folder.
-   * Returns attachment metadata in the same shape used by ProjectsService.
-   */
   private async uploadLessonAttachments(
     courseId: string,
     lessonId: string,
@@ -623,6 +643,7 @@ export class CoursesService {
     instructorId: string,
     createLessonDto: any,
     files?: MulterFile[],
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -642,16 +663,17 @@ export class CoursesService {
       .eq("id", module.course_id)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to add lessons to this module",
       );
     }
 
-    // Pre-generate lesson ID so the Cloudinary folder path is stable
     const lessonId = createLessonDto.id ?? uuidv4();
 
-    // Upload any attached files (PDF, docs, images, etc.)
     const uploadedAttachments =
       files && files.length > 0
         ? await this.uploadLessonAttachments(
@@ -661,18 +683,12 @@ export class CoursesService {
           )
         : [];
 
-    // Merge caller-supplied link attachments with the uploads
     const callerAttachments = Array.isArray(createLessonDto.attachments)
       ? createLessonDto.attachments
       : [];
 
-    const mergedAttachments = [
-      ...callerAttachments,
-      ...uploadedAttachments,
-    ];
+    const mergedAttachments = [...callerAttachments, ...uploadedAttachments];
 
-    // If no explicit resource_url was given but a file was uploaded,
-    // use the first file as the primary downloadable resource.
     const resourceUrl =
       createLessonDto.resource_url ??
       (uploadedAttachments.length > 0 ? uploadedAttachments[0].url : null);
@@ -702,6 +718,7 @@ export class CoursesService {
     instructorId: string,
     updateData: any,
     files?: MulterFile[],
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -726,13 +743,15 @@ export class CoursesService {
       .eq("id", courseId)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to modify this lesson",
       );
     }
 
-    // If new files were sent, append them to the existing attachments
     let mergedAttachments = updateData.attachments;
 
     if (files && files.length > 0) {
@@ -773,7 +792,11 @@ export class CoursesService {
     return data;
   }
 
-  async deleteLesson(lessonId: string, instructorId: string) {
+  async deleteLesson(
+    lessonId: string,
+    instructorId: string,
+    isAdmin: boolean = false,
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
@@ -797,7 +820,10 @@ export class CoursesService {
       .eq("id", courseId)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to delete this lesson",
       );
@@ -820,10 +846,6 @@ export class CoursesService {
 
   // ==================== LESSON ATTACHMENTS (STANDALONE) ====================
 
-  /**
-   * Add a link and/or files to an existing lesson.
-   * Useful when the instructor wants to drop a PDF or link after creation.
-   */
   async addLessonAttachment(
     lessonId: string,
     instructorId: string,
@@ -831,6 +853,7 @@ export class CoursesService {
       link?: { filename: string; url: string };
       files?: MulterFile[];
     },
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -851,7 +874,10 @@ export class CoursesService {
       .eq("id", courseId)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to modify this lesson",
       );
@@ -905,14 +931,11 @@ export class CoursesService {
     return data;
   }
 
-  /**
-   * Remove a single attachment by its Cloudinary public_id
-   * (or by matching URL for link-only attachments).
-   */
   async removeLessonAttachment(
     lessonId: string,
     instructorId: string,
     publicIdOrUrl: string,
+    isAdmin: boolean = false,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -933,7 +956,10 @@ export class CoursesService {
       .eq("id", courseId)
       .single();
 
-    if (courseError || !course || course.instructor_id !== instructorId) {
+    if (
+      !isAdmin &&
+      (courseError || !course || course.instructor_id !== instructorId)
+    ) {
       throw new ForbiddenException(
         "You do not have permission to modify this lesson",
       );
@@ -950,7 +976,6 @@ export class CoursesService {
       (a) => a.public_id !== publicIdOrUrl && a.url !== publicIdOrUrl,
     );
 
-    // Best-effort Cloudinary cleanup — don't fail the request if it errors
     if (toRemove?.public_id) {
       try {
         const anyCloud = this.cloudinaryService as any;
@@ -1126,7 +1151,6 @@ export class CoursesService {
         video_duration: lesson.video_duration,
         text_content: lesson.text_content,
         is_free: lesson.is_free,
-        // 👇 New fields exposed to students
         attachments: lesson.attachments ?? [],
         resource_url: lesson.resource_url ?? null,
         is_completed: progress?.is_completed || false,
