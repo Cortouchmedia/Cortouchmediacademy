@@ -1009,28 +1009,28 @@ export class CoursesService {
 
   async enrollInCourse(userId: string, courseId: string) {
     const supabase = this.supabaseService.getAdminClient();
-
+  
     const { data: existing } = await supabase
       .from("course_enrollments")
       .select("id")
       .eq("user_id", userId)
       .eq("course_id", courseId)
       .maybeSingle();
-
+  
     if (existing) {
       throw new BadRequestException("Already enrolled in this course");
     }
-
+  
     const { data: course } = await supabase
       .from("courses")
       .select("id, status")
       .eq("id", courseId)
       .single();
-
+  
     if (!course || course.status !== "PUBLISHED") {
       throw new BadRequestException("Course is not available for enrollment");
     }
-
+  
     const { data, error } = await supabase
       .from("course_enrollments")
       .insert({
@@ -1041,12 +1041,12 @@ export class CoursesService {
       })
       .select()
       .single();
-
+  
     if (error) {
       this.logger.error(`Failed to enroll: ${error.message}`);
       throw new BadRequestException(`Failed to enroll: ${error.message}`);
     }
-
+  
     return data;
   }
 
@@ -1184,29 +1184,31 @@ export class CoursesService {
 
   async updateLessonProgress(userId: string, progressDto: any) {
     const supabase = this.supabaseService.getAdminClient();
-
+  
     const { data: existing } = await supabase
       .from("user_lesson_progress")
-      .select("id")
+      .select("id, completed_at")                     // 👈 added completed_at
       .eq("user_id", userId)
       .eq("lesson_id", progressDto.lesson_id)
       .maybeSingle();
-
+  
     let result;
-
+  
     if (existing) {
       const { data, error } = await supabase
         .from("user_lesson_progress")
         .update({
           is_completed: progressDto.is_completed,
           last_watched_position: progressDto.last_watched_position || 0,
-          completed_at: progressDto.is_completed ? new Date() : null,
+          completed_at: progressDto.is_completed
+            ? (existing.completed_at ?? new Date())   // 👈 preserve original date
+            : null,
           updated_at: new Date(),
         })
         .eq("id", existing.id)
         .select()
         .single();
-
+  
       result = { data, error };
     } else {
       const { data, error } = await supabase
@@ -1220,18 +1222,18 @@ export class CoursesService {
         })
         .select()
         .single();
-
+  
       result = { data, error };
     }
-
+  
     if (result.error) {
       throw new BadRequestException(
         `Failed to update progress: ${result.error.message}`,
       );
     }
-
+  
     await this.updateCourseProgress(userId, progressDto.lesson_id);
-
+  
     return result.data;
   }
 
