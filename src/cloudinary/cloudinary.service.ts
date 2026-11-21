@@ -138,22 +138,24 @@ export class CloudinaryService {
     upload_url: string;
   } {
     const timestamp = Math.round(Date.now() / 1000);
-    const paramsToSign = { timestamp, folder, resource_type: resourceType };
+    const paramsToSign = { timestamp, folder };  // ✅ only these two
 
     const signature = this.cloudinary.utils.api_sign_request(
       paramsToSign,
       process.env.CLOUDINARY_API_SECRET!,
     );
 
+    // ✅ ADD THIS LINE BACK:
     const cloud_name = process.env.CLOUDINARY_CLOUD_NAME!;
+
     return {
       timestamp,
       signature,
       folder,
       resource_type: resourceType,
       api_key: process.env.CLOUDINARY_API_KEY!,
-      cloud_name,
-      upload_url: `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
+      cloud_name, // ✅ Now this variable exists
+      upload_url: `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`, // ✅ And this works
     };
   }
 
