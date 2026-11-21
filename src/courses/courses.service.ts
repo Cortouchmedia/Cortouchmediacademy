@@ -31,12 +31,13 @@ export class CoursesService {
 
   // ==================== SHARED HELPERS ====================
 
-  // ✅ FIX: Shared helpers so course/module/lesson whitelists stay consistent
   private static readonly LESSON_FIELDS = [
     "title",
     "description",
     "order_number",
     "video_url",
+    "video_public_id",
+    "video_bytes",
     "video_duration",
     "text_content",
     "is_free",
@@ -65,10 +66,6 @@ export class CoursesService {
     "order_number",
   ] as const;
 
-  /**
-   * ✅ FIX: Generic whitelist builder.
-   * Copies only known fields, drops anything else.
-   */
   private buildWhitelistedPayload(
     source: any,
     allowed: readonly string[],
@@ -82,16 +79,23 @@ export class CoursesService {
     return payload;
   }
 
-  /**
-   * ✅ FIX: Normalize video_duration to a number and throw
-   * a clear 400 instead of silently corrupting the DB.
-   */
   private normalizeVideoDuration(payload: Record<string, any>) {
+    if (payload.video_duration_seconds !== undefined) {
+      const sec = Number(payload.video_duration_seconds);
+      if (Number.isNaN(sec) || sec < 0) {
+        throw new BadRequestException(
+          `video_duration_seconds must be a non-negative number`,
+        );
+      }
+      payload.video_duration = sec / 60;
+      delete payload.video_duration_seconds;
+    }
+
     if (payload.video_duration !== undefined) {
       const parsed = Number(payload.video_duration);
-      if (Number.isNaN(parsed) || parsed < 0) {
+      if (Number.isNaN(parsed) || parsed < 0 || parsed > 24 * 60) {
         throw new BadRequestException(
-          `video_duration must be a non-negative number (received "${payload.video_duration}")`,
+          `video_duration must be a number between 0 and 1440 minutes (received "${payload.video_duration}")`,
         );
       }
       payload.video_duration = parsed;
@@ -103,7 +107,6 @@ export class CoursesService {
   async createCourse(instructorId: string, createCourseDto: any) {
     const supabase = this.supabaseService.getAdminClient();
 
-    // ✅ FIX: Whitelist course fields instead of ...createCourseDto
     const payload = this.buildWhitelistedPayload(
       createCourseDto,
       CoursesService.COURSE_FIELDS,
@@ -357,7 +360,6 @@ export class CoursesService {
       );
     }
 
-    // ✅ FIX: Whitelist instead of ...updateCourseDto
     const payload = this.buildWhitelistedPayload(
       updateCourseDto,
       CoursesService.COURSE_FIELDS,
@@ -460,6 +462,22 @@ export class CoursesService {
       query = query.eq("instructor_id", instructorId);
     }
 
+    // Gather Cloudinary assets before delete
+    const { data: courseModules } = await supabase
+      .from("course_modules")
+      .select("id")
+      .eq("course_id", courseId);
+
+    const moduleIds = (courseModules || []).map((m) => m.id);
+    let lessons: any[] = [];
+    if (moduleIds.length > 0) {
+      const { data } = await supabase
+        .from("course_lessons")
+        .select("video_public_id, attachments")
+        .in("module_id", moduleIds);
+      lessons = data || [];
+    }
+
     const { error } = await query;
 
     if (error) {
@@ -468,6 +486,8 @@ export class CoursesService {
         `Failed to delete course: ${error.message}`,
       );
     }
+
+    await this.destroyLessonAssets(lessons);
 
     return { message: "Course deleted successfully" };
   }
@@ -574,7 +594,6 @@ export class CoursesService {
       );
     }
 
-    // ✅ FIX: Whitelist module fields
     const payload = this.buildWhitelistedPayload(
       createModuleDto,
       CoursesService.MODULE_FIELDS,
@@ -630,7 +649,6 @@ export class CoursesService {
       );
     }
 
-    // ✅ FIX: Whitelist instead of raw updateData
     const payload = this.buildWhitelistedPayload(
       updateData,
       CoursesService.MODULE_FIELDS,
@@ -686,6 +704,11 @@ export class CoursesService {
       );
     }
 
+    const { data: lessons } = await supabase
+      .from("course_lessons")
+      .select("video_public_id, attachments")
+      .eq("module_id", moduleId);
+
     const { error } = await supabase
       .from("course_modules")
       .delete()
@@ -697,6 +720,8 @@ export class CoursesService {
         `Failed to delete module: ${error.message}`,
       );
     }
+
+    await this.destroyLessonAssets(lessons || []);
 
     return { message: "Module deleted successfully" };
   }
@@ -731,6 +756,70 @@ export class CoursesService {
     }
 
     return uploaded;
+  }
+
+  // ==================== VIDEO HELPERS ====================
+
+  private async uploadLessonVideo(
+    courseId: string,
+    lessonId: string,
+    file: MulterFile,
+  ): Promise<{
+    url: string;
+    public_id: string;
+    duration: number;
+    bytes: number;
+  }> {
+    const result = await this.cloudinaryService.uploadVideo(file.buffer, {
+      folder: `course-content/${courseId}/${lessonId}/videos`,
+      public_id: `${uuidv4()}-${file.originalname.replace(/\.[^.]+$/, "")}`,
+    });
+    return {
+      url: result.secure_url as string,
+      public_id: result.public_id as string,
+      duration: result.duration as number,
+      bytes: result.bytes as number,
+    };
+  }
+
+  private async destroyCloudinaryVideo(publicId: string) {
+    try {
+      await this.cloudinaryService.destroyVideo(publicId);
+    } catch (err: any) {
+      this.logger.warn(
+        `Cloudinary video destroy failed for ${publicId}: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  private async destroyLessonAssets(
+    lessons: Array<{ video_public_id?: string | null; attachments?: any[] }>,
+  ) {
+    for (const lesson of lessons) {
+      if (lesson.video_public_id) {
+        await this.destroyCloudinaryVideo(lesson.video_public_id);
+      }
+      for (const att of lesson.attachments ?? []) {
+        if (att?.public_id) {
+          try {
+            await this.cloudinaryService.deleteFile(att.public_id, {
+              resource_type: "auto",
+            });
+          } catch (err: any) {
+            this.logger.warn(
+              `Attachment delete failed for ${att.public_id}: ${err?.message ?? err}`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  generateUploadSignature() {
+    return this.cloudinaryService.generateUploadSignature(
+      "course-content/videos",
+      "video",
+    );
   }
 
   // ==================== LESSON MANAGEMENT ====================
@@ -771,12 +860,15 @@ export class CoursesService {
 
     const lessonId = createLessonDto.id ?? uuidv4();
 
+    // Attachments (skip video files)
+    const nonVideoFiles =
+      files?.filter((f) => !f.mimetype.startsWith("video/")) ?? [];
     const uploadedAttachments =
-      files && files.length > 0
+      nonVideoFiles.length > 0
         ? await this.uploadLessonAttachments(
             module.course_id,
             lessonId,
-            files,
+            nonVideoFiles,
           )
         : [];
 
@@ -790,12 +882,38 @@ export class CoursesService {
       createLessonDto.resource_url ??
       (uploadedAttachments.length > 0 ? uploadedAttachments[0].url : null);
 
-    // ✅ FIX: Whitelist lesson fields instead of ...createLessonDto
+    // Video — prefer pre-uploaded URL, else server-side file
+    let videoUrl: string | undefined = createLessonDto.video_url;
+    let videoPublicId: string | undefined = createLessonDto.video_public_id;
+    let videoBytes: number | undefined = createLessonDto.video_bytes;
+
+    const videoFile = files?.find((f) => f.mimetype.startsWith("video/"));
+    let uploadedVideoPublicId: string | null = null;
+    if (videoFile && !videoUrl) {
+      const uploaded = await this.uploadLessonVideo(
+        module.course_id,
+        lessonId,
+        videoFile,
+      );
+      videoUrl = uploaded.url;
+      videoPublicId = uploaded.public_id;
+      videoBytes = uploaded.bytes;
+      uploadedVideoPublicId = uploaded.public_id;
+      if (createLessonDto.video_duration === undefined) {
+        createLessonDto.video_duration = uploaded.duration / 60;
+      }
+    }
+
+    // FIX #5: normalize BEFORE whitelisting so video_duration_seconds survives
+    this.normalizeVideoDuration(createLessonDto);
     const payload = this.buildWhitelistedPayload(
       createLessonDto,
       CoursesService.LESSON_FIELDS,
     );
-    this.normalizeVideoDuration(payload);
+
+    if (videoUrl) payload.video_url = videoUrl;
+    if (videoPublicId) payload.video_public_id = videoPublicId;
+    if (videoBytes !== undefined) payload.video_bytes = videoBytes;
 
     const { data, error } = await supabase
       .from("course_lessons")
@@ -811,6 +929,10 @@ export class CoursesService {
 
     if (error) {
       this.logger.error(`Failed to add lesson: ${error.message}`);
+      // FIX #3: roll back the Cloudinary upload if the DB insert failed
+      if (uploadedVideoPublicId) {
+        await this.destroyCloudinaryVideo(uploadedVideoPublicId);
+      }
       throw new BadRequestException(`Failed to add lesson: ${error.message}`);
     }
 
@@ -824,14 +946,15 @@ export class CoursesService {
     files?: MulterFile[],
     isAdmin: boolean = false,
   ) {
-    // ✅ FIX: Replaced console.log with logger.debug
     this.logger.debug(`updateLesson payload: ${JSON.stringify(updateData)}`);
 
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
       .from("course_lessons")
-      .select("module:course_modules(course_id), attachments")
+      .select(
+        "module:course_modules(course_id), attachments, video_public_id, video_url",
+      )
       .eq("id", lessonId)
       .single();
 
@@ -859,13 +982,16 @@ export class CoursesService {
       );
     }
 
+    // Attachments (skip video files)
     let mergedAttachments = updateData.attachments;
 
-    if (files && files.length > 0) {
+    const nonVideoFiles =
+      files?.filter((f) => !f.mimetype.startsWith("video/")) ?? [];
+    if (nonVideoFiles.length > 0) {
       const uploaded = await this.uploadLessonAttachments(
         courseId,
         lessonId,
-        files,
+        nonVideoFiles,
       );
       const existing = Array.isArray(lesson.attachments)
         ? lesson.attachments
@@ -877,17 +1003,50 @@ export class CoursesService {
       mergedAttachments = [...existing, ...callerProvided, ...uploaded];
     }
 
-    // ✅ FIX: Use shared whitelist (includes video_duration)
+    // Video replacement
+    const oldVideoPublicId = (lesson as any).video_public_id as string | null;
+    const videoFile = files?.find((f) => f.mimetype.startsWith("video/"));
+
+    let uploadedVideoPublicId: string | null = null;
+    if (videoFile) {
+      const uploaded = await this.uploadLessonVideo(
+        courseId,
+        lessonId,
+        videoFile,
+      );
+      updateData.video_url = uploaded.url;
+      updateData.video_public_id = uploaded.public_id;
+      updateData.video_bytes = uploaded.bytes;
+      uploadedVideoPublicId = uploaded.public_id;
+      if (updateData.video_duration === undefined) {
+        updateData.video_duration = uploaded.duration / 60;
+      }
+
+      if (oldVideoPublicId && oldVideoPublicId !== uploaded.public_id) {
+        await this.destroyCloudinaryVideo(oldVideoPublicId);
+      }
+    } else if (
+      updateData.video_public_id &&
+      oldVideoPublicId &&
+      updateData.video_public_id !== oldVideoPublicId
+    ) {
+      await this.destroyCloudinaryVideo(oldVideoPublicId);
+    } else if (updateData.video_url === null && oldVideoPublicId) {
+      await this.destroyCloudinaryVideo(oldVideoPublicId);
+      updateData.video_public_id = null;
+      updateData.video_bytes = null;
+    }
+
+    // FIX #5: normalize BEFORE whitelisting
+    this.normalizeVideoDuration(updateData);
     const payload = this.buildWhitelistedPayload(
       updateData,
       CoursesService.LESSON_FIELDS,
     );
-    this.normalizeVideoDuration(payload);
 
     if (mergedAttachments !== undefined) {
       payload.attachments = mergedAttachments;
     }
-
     payload.updated_at = new Date();
 
     const { data, error } = await supabase
@@ -899,6 +1058,10 @@ export class CoursesService {
 
     if (error) {
       this.logger.error(`Failed to update lesson: ${error.message}`);
+      // FIX #3: roll back the newly uploaded video if the update failed
+      if (uploadedVideoPublicId) {
+        await this.destroyCloudinaryVideo(uploadedVideoPublicId);
+      }
       throw new BadRequestException(
         `Failed to update lesson: ${error.message}`,
       );
@@ -916,7 +1079,7 @@ export class CoursesService {
 
     const { data: lesson, error: lessonError } = await supabase
       .from("course_lessons")
-      .select("module:course_modules(course_id)")
+      .select("module:course_modules(course_id), video_public_id")
       .eq("id", lessonId)
       .single();
 
@@ -954,6 +1117,11 @@ export class CoursesService {
       throw new BadRequestException(
         `Failed to delete lesson: ${error.message}`,
       );
+    }
+
+    const videoPublicId = (lesson as any).video_public_id as string | null;
+    if (videoPublicId) {
+      await this.destroyCloudinaryVideo(videoPublicId);
     }
 
     return { message: "Lesson deleted successfully" };
@@ -1093,10 +1261,9 @@ export class CoursesService {
 
     if (toRemove?.public_id) {
       try {
-        const anyCloud = this.cloudinaryService as any;
-        if (typeof anyCloud.deleteFile === "function") {
-          await anyCloud.deleteFile(toRemove.public_id);
-        }
+        await this.cloudinaryService.deleteFile(toRemove.public_id, {
+          resource_type: "auto",
+        });
       } catch (err: any) {
         this.logger.warn(
           `Cloudinary delete failed for ${toRemove.public_id}: ${err?.message ?? err}`,
@@ -1263,6 +1430,8 @@ export class CoursesService {
         description: lesson.description,
         order_number: lesson.order_number,
         video_url: lesson.video_url,
+        video_public_id: lesson.video_public_id ?? null,
+        video_bytes: lesson.video_bytes ?? null,
         video_duration: Number(lesson.video_duration) || 0,
         text_content: lesson.text_content,
         is_free: lesson.is_free,

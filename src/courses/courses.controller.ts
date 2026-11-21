@@ -244,6 +244,16 @@ private parseDurationToMinutes(input: string | number): number | undefined {
     return this.coursesService.rejectCourse(id);
   }
 
+  @Post("upload-signature")
+  @UseGuards(SupabaseAuthGuard)
+  async getUploadSignature(@CurrentUser() user: AuthUser) {
+    const role = (user.role ?? "").toUpperCase();
+    if (!this.isAdmin(user) && role !== "INSTRUCTOR") {
+      throw new ForbiddenException("Only instructors or admins can upload");
+    }
+    return this.coursesService.generateUploadSignature();
+  }
+
   // ==================== INSTRUCTOR-SCOPED READ ROUTES ====================
 
   @Get("instructor/:instructorId/courses")

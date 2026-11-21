@@ -1,6 +1,7 @@
-// src/cloudinary/cloudinary.service.ts
 import { Injectable, Inject, Logger } from "@nestjs/common";
 import { Readable } from "stream";
+
+type ResourceType = "image" | "video" | "raw";
 
 @Injectable()
 export class CloudinaryService {
@@ -8,6 +9,9 @@ export class CloudinaryService {
 
   constructor(@Inject("CLOUDINARY") private readonly cloudinary: any) {}
 
+  // ---------------------------------------------------------------------------
+  // Video upload
+  // ---------------------------------------------------------------------------
   async uploadVideo(
     fileBuffer: Buffer,
     options: {
@@ -25,25 +29,157 @@ export class CloudinaryService {
           resource_type: "video",
           folder: options.folder || "course-videos",
           public_id: options.public_id,
-          eager: options.eager || [
-            { streaming_profile: "full_hd", format: "m3u8" },
-            { format: "mp4" },
-            { format: "webm" },
-          ],
-          eager_async:
-            options.eager_async !== undefined ? options.eager_async : true,
+          eager: options.eager,
+          eager_async: options.eager_async,
           overwrite: options.overwrite !== undefined ? options.overwrite : true,
           invalidate:
             options.invalidate !== undefined ? options.invalidate : true,
         },
-        (error, result) => {
+        (error: any, result: any) => {
           if (error) {
             this.logger.error(`Cloudinary upload error: ${error.message}`);
             reject(error);
           } else {
-            this.logger.log(
-              `Video uploaded successfully: ${result?.public_id}`,
-            );
+            this.logger.log(`Video uploaded: ${result?.public_id}`);
+            resolve(result);
+          }
+        },
+      );
+
+      const readableStream = new Readable();
+      readableStream.push(fileBuffer);
+      readableStream.push(null);
+      readableStream.pipe(uploadStream);
+    });
+  }
+  async deleteFile(
+    publicId: string,
+    options: { resource_type?: ResourceType | "auto" } = {},
+  ): Promise<any> {
+    const requested = options.resource_type ?? "image";
+    const types: ResourceType[] =
+      requested === "auto" ? ["video", "image", "raw"] : [requested];
+
+    let lastErr: any = null;
+    for (const rt of types) {
+      try {
+        const result = await new Promise<any>((resolve, reject) => {
+          this.cloudinary.uploader.destroy(
+            publicId,
+            { resource_type: rt, invalidate: true },
+            (error: any, result: any) =>
+              error ? reject(error) : resolve(result),
+          );
+        });
+        if (result?.result === "ok") return result;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (lastErr) throw lastErr;
+    return { result: "not found" };
+  }
+
+  async destroyVideo(publicId: string): Promise<any> {
+    return this.deleteVideo(publicId);
+  }
+
+  async deleteVideo(publicId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.cloudinary.uploader.destroy(
+        publicId,
+        { resource_type: "video", invalidate: true },
+        (error: any, result: any) => {
+          if (error) {
+            this.logger.error(`Cloudinary delete error: ${error.message}`);
+            reject(error);
+          } else {
+            if (result?.result !== "ok" && result?.result !== "not found") {
+              this.logger.warn(
+                `Cloudinary delete for video/${publicId} returned "${result?.result}"`,
+              );
+            }
+            this.logger.log(`Video deleted: ${publicId}`);
+            resolve(result);
+          }
+        },
+      );
+    });
+  }
+
+  async deleteImage(publicId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.cloudinary.uploader.destroy(
+        publicId,
+        { resource_type: "image", invalidate: true },
+        (error: any, result: any) => {
+          if (error) {
+            this.logger.error(`Cloudinary delete error: ${error.message}`);
+            reject(error);
+          } else {
+            this.logger.log(`Image deleted: ${publicId}`);
+            resolve(result);
+          }
+        },
+      );
+    });
+  }
+
+  generateUploadSignature(
+    folder = "course-content",
+    resourceType: ResourceType = "video",
+  ): {
+    timestamp: number;
+    signature: string;
+    folder: string;
+    resource_type: ResourceType;
+    api_key: string;
+    cloud_name: string;
+    upload_url: string;
+  } {
+    const timestamp = Math.round(Date.now() / 1000);
+    const paramsToSign = { timestamp, folder, resource_type: resourceType };
+
+    const signature = this.cloudinary.utils.api_sign_request(
+      paramsToSign,
+      process.env.CLOUDINARY_API_SECRET!,
+    );
+
+    const cloud_name = process.env.CLOUDINARY_CLOUD_NAME!;
+    return {
+      timestamp,
+      signature,
+      folder,
+      resource_type: resourceType,
+      api_key: process.env.CLOUDINARY_API_KEY!,
+      cloud_name,
+      upload_url: `https://api.cloudinary.com/v1_1/${cloud_name}/${resourceType}/upload`,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Generic file upload (used for lesson attachments: PDFs, docs, etc.)
+  // ---------------------------------------------------------------------------
+  async uploadFile(
+    fileBuffer: Buffer,
+    options: {
+      folder?: string;
+      public_id?: string;
+      resource_type?: string;
+    } = {},
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = this.cloudinary.uploader.upload_stream(
+        {
+          resource_type: options.resource_type || "auto",
+          folder: options.folder || "uploads",
+          public_id: options.public_id,
+        },
+        (error: any, result: any) => {
+          if (error) {
+            this.logger.error(`Cloudinary upload error: ${error.message}`);
+            reject(error);
+          } else {
             resolve(result);
           }
         },
@@ -56,40 +192,49 @@ export class CloudinaryService {
     });
   }
 
-  async deleteVideo(publicId: string): Promise<any> {
+  // ---------------------------------------------------------------------------
+  // Image upload
+  // ---------------------------------------------------------------------------
+  async uploadImage(
+    fileBuffer: Buffer,
+    options: {
+      folder?: string;
+      public_id?: string;
+      transformation?: any[];
+    } = {},
+  ): Promise<any> {
     return new Promise((resolve, reject) => {
-      this.cloudinary.uploader.destroy(
-        publicId,
-        { resource_type: "video" },
-        (error, result) => {
+      const uploadStream = this.cloudinary.uploader.upload_stream(
+        {
+          resource_type: "image",
+          folder: options.folder || "assets",
+          public_id: options.public_id,
+          transformation: options.transformation || [
+            { quality: "auto" },
+            { fetch_format: "auto" },
+          ],
+        },
+        (error: any, result: any) => {
           if (error) {
-            this.logger.error(`Cloudinary delete error: ${error.message}`);
+            this.logger.error(`Cloudinary upload error: ${error.message}`);
             reject(error);
           } else {
-            this.logger.log(`Video deleted: ${publicId}`);
+            this.logger.log(`Image uploaded: ${result?.public_id}`);
             resolve(result);
           }
         },
       );
+
+      const readableStream = new Readable();
+      readableStream.push(fileBuffer);
+      readableStream.push(null);
+      readableStream.pipe(uploadStream);
     });
   }
 
-  async getVideoInfo(publicId: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.cloudinary.api.resource(
-        publicId,
-        { resource_type: "video" },
-        (error, result) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve(result);
-          }
-        },
-      );
-    });
-  }
-
+  // ---------------------------------------------------------------------------
+  // URL builders
+  // ---------------------------------------------------------------------------
   generateVideoUrl(
     publicId: string,
     options: {
@@ -119,6 +264,7 @@ export class CloudinaryService {
       resource_type: "video",
       format: options.format || "mp4",
       transformation: transformation.length > 0 ? transformation : undefined,
+      secure: true,
     });
   }
 
@@ -127,6 +273,7 @@ export class CloudinaryService {
       resource_type: "video",
       format: "m3u8",
       transformation: [{ streaming_profile: "full_hd" }],
+      secure: true,
     });
   }
 
@@ -153,6 +300,7 @@ export class CloudinaryService {
     return this.cloudinary.url(publicId, {
       resource_type: "video",
       transformation,
+      secure: true,
     });
   }
 
@@ -160,97 +308,7 @@ export class CloudinaryService {
     return this.cloudinary.url(publicId, {
       resource_type: "video",
       transformation: [{ flags: "sprite" }, { format: "jpg" }],
-    });
-  }
-
-  // src/cloudinary/cloudinary.service.ts - Add these methods
-
-  async uploadImage(
-    fileBuffer: Buffer,
-    options: {
-      folder?: string;
-      public_id?: string;
-      transformation?: any[];
-    } = {},
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const uploadStream = this.cloudinary.uploader.upload_stream(
-        {
-          folder: options.folder || "assets",
-          public_id: options.public_id,
-          transformation: options.transformation || [
-            { quality: "auto" },
-            { fetch_format: "auto" },
-          ],
-        },
-        (error, result) => {
-          if (error) {
-            this.logger.error(`Cloudinary upload error: ${error.message}`);
-            reject(error);
-          } else {
-            this.logger.log(
-              `Image uploaded successfully: ${result?.public_id}`,
-            );
-            resolve(result);
-          }
-        },
-      );
-
-      const readableStream = new Readable();
-      readableStream.push(fileBuffer);
-      readableStream.push(null);
-      readableStream.pipe(uploadStream);
-    });
-  }
-
-  async deleteImage(publicId: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      this.cloudinary.uploader.destroy(
-        publicId,
-        { resource_type: "image" },
-        (error, result) => {
-          if (error) {
-            this.logger.error(`Cloudinary delete error: ${error.message}`);
-            reject(error);
-          } else {
-            this.logger.log(`Image deleted: ${publicId}`);
-            resolve(result);
-          }
-        },
-      );
-    });
-  }
-
-  // Add to cloudinary.service.ts
-  async uploadFile(
-    fileBuffer: Buffer,
-    options: {
-      folder?: string;
-      public_id?: string;
-      resource_type?: string;
-    } = {},
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const uploadStream = this.cloudinary.uploader.upload_stream(
-        {
-          resource_type: options.resource_type || "auto",
-          folder: options.folder || "uploads",
-          public_id: options.public_id,
-        },
-        (error, result) => {
-          if (error) {
-            this.logger.error(`Cloudinary upload error: ${error.message}`);
-            reject(error);
-          } else {
-            resolve(result);
-          }
-        },
-      );
-
-      const readableStream = new Readable();
-      readableStream.push(fileBuffer);
-      readableStream.push(null);
-      readableStream.pipe(uploadStream);
+      secure: true,
     });
   }
 
@@ -287,6 +345,23 @@ export class CloudinaryService {
     return this.cloudinary.url(publicId, {
       resource_type: "image",
       transformation: transformation.length > 0 ? transformation : undefined,
+      secure: true,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Misc
+  // ---------------------------------------------------------------------------
+  async getVideoInfo(publicId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.cloudinary.api.resource(
+        publicId,
+        { resource_type: "video" },
+        (error: any, result: any) => {
+          if (error) reject(error);
+          else resolve(result);
+        },
+      );
     });
   }
 }
