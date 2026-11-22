@@ -206,6 +206,11 @@ export class CoursesService {
       if (!modulesByCourse.has(m.course_id)) {
         modulesByCourse.set(m.course_id, []);
       }
+      if (Array.isArray(m.lessons)) {
+        m.lessons.sort((a: any, b: any) => 
+          (Number(a.order_number) || 0) - (Number(b.order_number) || 0)
+        );
+      }
       modulesByCourse.get(m.course_id)!.push(m);
     });
 
@@ -294,6 +299,16 @@ export class CoursesService {
       )
       .eq("course_id", courseId)
       .order("order_number", { ascending: true });
+
+      if (modules) {
+        modules.forEach((m: any) => {
+          if (Array.isArray(m.lessons)) {
+            m.lessons.sort((a: any, b: any) => 
+              (Number(a.order_number) || 0) - (Number(b.order_number) || 0)
+            );
+          }
+        });
+      }
 
     const allLessons = modules?.flatMap((m) => m.lessons) || [];
     const totalLessons = allLessons.length;
