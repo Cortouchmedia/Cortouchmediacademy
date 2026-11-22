@@ -951,18 +951,22 @@ export class CoursesService {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
-      .from("course_lessons")
-      .select(
-        "module:course_modules(course_id), attachments, video_public_id, video_url",
-      )
-      .eq("id", lessonId)
-      .single();
+  .from("course_lessons")
+  .select("module_id, video_public_id, attachments")
+  .eq("id", lessonId)
+  .single();
 
-    if (lessonError || !lesson) {
-      throw new NotFoundException("Lesson not found");
-    }
+if (lessonError || !lesson) {
+  throw new NotFoundException("Lesson not found");
+}
 
-    const courseId = (lesson.module as any)?.course_id;
+const { data: module } = await supabase
+  .from("course_modules")
+  .select("course_id")
+  .eq("id", lesson.module_id)
+  .single();
+
+const courseId = module?.course_id;
     if (!courseId) {
       throw new NotFoundException("Course not found for this lesson");
     }
@@ -1078,16 +1082,22 @@ export class CoursesService {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
-      .from("course_lessons")
-      .select("module:course_modules(course_id), video_public_id")
-      .eq("id", lessonId)
-      .single();
+  .from("course_lessons")
+  .select("module_id, attachments")
+  .eq("id", lessonId)
+  .single();
 
-    if (lessonError || !lesson) {
-      throw new NotFoundException("Lesson not found");
-    }
+if (lessonError || !lesson) {
+  throw new NotFoundException("Lesson not found");
+}
 
-    const courseId = (lesson.module as any)?.course_id;
+const { data: module } = await supabase
+  .from("course_modules")
+  .select("course_id")
+  .eq("id", lesson.module_id)
+  .single();
+
+const courseId = module?.course_id;
     if (!courseId) {
       throw new NotFoundException("Course not found for this lesson");
     }
@@ -1141,17 +1151,23 @@ export class CoursesService {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
-      .from("course_lessons")
-      .select("module:course_modules(course_id), attachments")
-      .eq("id", lessonId)
-      .single();
+    .from("course_lessons")
+    .select("module_id, attachments")
+    .eq("id", lessonId)
+    .single();
 
-    if (lessonError || !lesson) {
-      throw new NotFoundException("Lesson not found");
-    }
+  if (lessonError || !lesson) {
+    throw new NotFoundException("Lesson not found");
+  }
 
-    const courseId = (lesson.module as any)?.course_id;
-    const { data: course, error: courseError } = await supabase
+  const { data: module } = await supabase
+    .from("course_modules")
+    .select("course_id")
+    .eq("id", lesson.module_id)
+    .single();
+
+  const courseId = module?.course_id;
+  const { data: course, error: courseError } = await supabase
       .from("courses")
       .select("instructor_id")
       .eq("id", courseId)
@@ -1223,17 +1239,22 @@ export class CoursesService {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
-      .from("course_lessons")
-      .select("module:course_modules(course_id), attachments")
-      .eq("id", lessonId)
-      .single();
+  .from("course_lessons")
+  .select("module_id, attachments")
+  .eq("id", lessonId)
+  .single();
 
-    if (lessonError || !lesson) {
-      throw new NotFoundException("Lesson not found");
-    }
+if (lessonError || !lesson) {
+  throw new NotFoundException("Lesson not found");
+}
 
-    const courseId = (lesson.module as any)?.course_id;
-    const { data: course, error: courseError } = await supabase
+const { data: module } = await supabase
+  .from("course_modules")
+  .select("course_id")
+  .eq("id", lesson.module_id)
+  .single();
+
+const courseId = module?.course_id;    const { data: course, error: courseError } = await supabase
       .from("courses")
       .select("instructor_id")
       .eq("id", courseId)
