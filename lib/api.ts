@@ -168,6 +168,8 @@ export interface CourseLesson {
   description?: string | null;
   order_number?: number;
   video_url?: string | null;
+  video_public_id?: string | null;   
+  video_bytes?: number | null;        
   video_duration?: number | null;
   text_content?: string | null;
   is_free?: boolean;
@@ -355,18 +357,16 @@ export const Api = {
 
   // ==================== LESSONS ====================
 
-  /**
-   * Create a lesson. Supports optional file attachments (PDF, docs, images).
-   * `fields.attachments` may contain link-only entries (e.g. Drive URLs);
-   * these are merged on the backend with the uploaded files.
-   */
   createLesson: (
     moduleId: string,
     fields: {
       title: string;
       description?: string;
       video_url?: string;
+      video_public_id?: string;      
+      video_bytes?: number;  
       video_duration?: number;
+      video_duration_seconds?: number; 
       text_content?: string;
       is_free?: boolean;
       order_number?: number;
@@ -380,6 +380,11 @@ export const Api = {
     fd.append('title', fields.title);
     if (fields.description) fd.append('description', fields.description);
     if (fields.video_url) fd.append('video_url', fields.video_url);
+    if (fields.video_public_id) fd.append('video_public_id', fields.video_public_id);      
+    if (fields.video_bytes !== undefined) fd.append('video_bytes', String(fields.video_bytes));
+    if (fields.video_duration_seconds !== undefined)
+      fd.append('video_duration_seconds', String(fields.video_duration_seconds));          
+
     if (fields.video_duration !== undefined)
       fd.append('video_duration', String(fields.video_duration));
     if (fields.text_content) fd.append('text_content', fields.text_content);
@@ -399,16 +404,27 @@ export const Api = {
     );
   },
 
-  /**
-   * Update a lesson (PUT). Files are appended to existing attachments.
-   */
+  uploadSignature: (token: string) =>
+  api.post<{
+    timestamp: number;
+    signature: string;
+    folder: string;
+    resource_type: string;
+    api_key: string;
+    cloud_name: string;
+    upload_url: string;
+  }>('/courses/upload-signature', {}, token),
+
   updateLesson: (
     lessonId: string,
     fields: Partial<{
       title: string;
       description: string;
       video_url: string;
+      video_public_id: string;
+      video_bytes: number;
       video_duration: number;
+      video_duration_seconds: number;
       text_content: string;
       is_free: boolean;
       order_number: number;
@@ -422,8 +438,14 @@ export const Api = {
     if (fields.title !== undefined) fd.append('title', fields.title);
     if (fields.description !== undefined)
       fd.append('description', fields.description);
-    if (fields.video_url !== undefined)
+      if (fields.video_url !== undefined)
       fd.append('video_url', fields.video_url);
+    if (fields.video_public_id !== undefined)
+      fd.append('video_public_id', fields.video_public_id);
+    if (fields.video_bytes !== undefined)
+      fd.append('video_bytes', String(fields.video_bytes));
+    if (fields.video_duration_seconds !== undefined)
+      fd.append('video_duration_seconds', String(fields.video_duration_seconds));
     if (fields.video_duration !== undefined)
       fd.append('video_duration', String(fields.video_duration));
     if (fields.text_content !== undefined)

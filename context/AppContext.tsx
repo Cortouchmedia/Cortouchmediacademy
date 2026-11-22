@@ -65,6 +65,7 @@ interface AppContextType {
   handleCourseDelete: (courseId: number | string) => Promise<void>;
   handleCourseApprove: (courseId: number | string) => Promise<void>;
   handleModuleAdd: (courseId: number | string, moduleTitle: string) => Promise<{ id: string | number; title: string } | null>;
+ 
   handleLessonAdd: (
     courseId: number | string,
     moduleId: number | string,
@@ -72,6 +73,13 @@ interface AppContextType {
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
   ) => Promise<void>;
 
@@ -82,20 +90,32 @@ interface AppContextType {
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
     files: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
   ) => Promise<void>;
 
-  // 👈 ADDED Update Lesson
   handleUpdateLesson: (
-    courseId: number | string,
     moduleId: number | string,
     lessonId: number | string,
     lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
     files?: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
@@ -281,8 +301,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...l,
           type: l.video_url ? 'video' : 'text',
           videoUrl: l.video_url ?? l.videoUrl ?? '',
+          video_public_id: l.video_public_id ?? null,  
+          video_bytes: l.video_bytes ?? null,          
           content: l.text_content ?? l.content ?? '',
-          duration: l.video_duration ? `${l.video_duration} min` : (l.duration ?? ''),
+          duration: l.video_duration 
+  ? `${Number(l.video_duration).toFixed(2).replace(/\.?0+$/, '')} min` 
+  : (l.duration ?? ''),
           isCompleted: l.isCompleted ?? false,
         })),
       })),
@@ -1162,6 +1186,7 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     return null;
   };
 
+  
   const handleLessonAdd = async (
     courseId: number | string,
     moduleId: number | string,
@@ -1169,8 +1194,16 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
   ): Promise<void> => {
+
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
     const course = courses.find((c) => String(c.id) === String(courseId));
@@ -1198,13 +1231,13 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
   const handleLessonWithFiles = async (
     courseId: number | string,
     moduleId: number | string,
-    lessonData: {
-      title: string;
-      video_duration?: number;
-      video_url?: string;
-      text_content?: string;
+    lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
       description?: string;
-      is_free?: boolean;
+      durationMinutes?: number;
+      isFree?: boolean;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration_seconds?: number;
     },
     files: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
@@ -1216,14 +1249,17 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     const moduleObj = course?.content?.find((m) => String(m.id) === String(moduleId));
     const order_number = moduleObj?.lessons?.length ?? 0;
   
-    // ✅ FIX: pass through directly — EditCourse already sends backend-shaped keys
+    
     const response = await Api.courses.createLesson(
       String(moduleId),
       {
         title: lessonData.title,
         description: lessonData.description,
         video_url: lessonData.video_url,
+        video_public_id: (lessonData as any).video_public_id,          
+        video_bytes: (lessonData as any).video_bytes,                 
         video_duration: lessonData.video_duration,
+        video_duration_seconds: (lessonData as any).video_duration_seconds, 
         text_content: lessonData.text_content,
         order_number,
         is_free: lessonData.is_free ?? false,
@@ -1244,7 +1280,6 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
   };
 
   const handleUpdateLesson = async (
-    courseId: number | string,
     moduleId: number | string,
     lessonId: number | string,
     lessonData: {
@@ -1261,14 +1296,16 @@ const slug = `${baseSlug}-${uniqueSuffix}`;
     const token = authStorage.getToken();
     if (!token || !currentUser) throw new Error('Not signed in');
   
-    // ✅ FIX: pass through directly
     await Api.courses.updateLesson(
       String(lessonId),
       {
         title: lessonData.title,
         description: lessonData.description,
         video_url: lessonData.video_url,
+        video_public_id: (lessonData as any).video_public_id,          // NEW
+        video_bytes: (lessonData as any).video_bytes,                  // NEW
         video_duration: lessonData.video_duration,
+        video_duration_seconds: (lessonData as any).video_duration_seconds, // NEW
         text_content: lessonData.text_content,
         is_free: lessonData.is_free ?? false,
         attachments: linkAttachments,

@@ -44,19 +44,25 @@ export interface LessonAttachment {
 }
 
 export interface Lesson {
-  id: number | string;            
+  id: number | string;
   title: string;
   duration: string;
   type: 'video' | 'text';
   videoUrl?: string;
   content?: string;
   isCompleted: boolean;
-
-  // 👇 NEW — populated by backend for lessons with attachments
   attachments?: LessonAttachment[];
   resource_url?: string | null;
   description?: string | null;
   order_number?: number;
+  video_url?: string | null;
+  video_public_id?: string | null;
+  video_bytes?: number | null;
+  video_duration?: number | null;
+  video_duration_seconds?: number | null;
+  text_content?: string | null;
+  is_free?: boolean;
+  last_watched_position?: number;
 }
 
 export interface Module {

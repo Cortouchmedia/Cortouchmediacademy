@@ -62,7 +62,10 @@ function durationLabelFor(lesson: any): string {
   if (!lesson) return '';
   if (lesson.video_duration) {
     const n = Number(lesson.video_duration);
-    return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n} min`;
+    const rounded = n.toFixed(2).replace(/\.?0+$/, '');
+    return n >= 60
+      ? `${Math.floor(n / 60)}h ${(n % 60).toFixed(2).replace(/\.?0+$/, '')}m`
+      : `${rounded} min`;
   }
   if (typeof lesson.duration === 'string') return lesson.duration;
   return '';
@@ -111,8 +114,11 @@ const formatBytes = (bytes?: number) => {
   return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 };
 
-// We keep the players simple. The Master Timer handles completion.
-const YouTubePlayer: React.FC<{ videoId: string; startAt?: number }> = ({ videoId, startAt = 0 }) => {
+const YouTubePlayer: React.FC<{ 
+  videoId: string; 
+  startAt?: number;
+  onEnded?: () => void;   // ← NEW
+}> = ({ videoId, startAt = 0, onEnded }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!containerRef.current) return;
@@ -131,23 +137,41 @@ const YouTubePlayer: React.FC<{ videoId: string; startAt?: number }> = ({ videoI
       player = new (window as any).YT.Player(playerDiv, {
         videoId: videoId,
         playerVars: { autoplay: 1, mute: 1, start: Math.floor(startAt), rel: 0 },
+        events: {
+          onStateChange: (e: any) => {
+            if (e.data === 0 && onEnded) onEnded();   // ← NEW
+          },
+        },
       });
     };
     if ((window as any).YT && (window as any).YT.Player) initPlayer();
     else (window as any).onYouTubeIframeAPIReady = initPlayer;
     return () => { if (player) player.destroy(); };
-  }, [videoId, startAt]);
+  }, [videoId, startAt, onEnded]);
   return <div ref={containerRef} className="w-full h-full" />;
 };
 
-const VimeoPlayer: React.FC<{ videoUrl: string; startAt?: number; lessonId: string | number }> = ({ videoUrl, startAt = 0, lessonId }) => {
+const VimeoPlayer: React.FC<{ 
+  videoUrl: string; 
+  startAt?: number; 
+  lessonId: string | number;
+  onEnded?: () => void;   // ← NEW
+}> = ({ videoUrl, startAt = 0, lessonId, onEnded }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!containerRef.current) return;
-    const player = new Player(containerRef.current, { url: videoUrl as any, autoplay: true, muted: true, responsive: true });
-    player.ready().then(() => { if (startAt > 0) player.setCurrentTime(startAt).catch(() => {}); }).catch(() => {});
+    const player = new Player(containerRef.current, {
+      url: videoUrl as any,
+      autoplay: true,
+      muted: true,
+      responsive: true,
+    });
+    player.ready().then(() => {
+      if (startAt > 0) player.setCurrentTime(startAt).catch(() => {});
+    }).catch(() => {});
+    if (onEnded) player.on('ended', onEnded);   // ← NEW
     return () => { player.destroy().catch(() => {}); };
-  }, [videoUrl, lessonId]);
+  }, [videoUrl, lessonId, onEnded]);
   return <div ref={containerRef} className="w-full h-full" />;
 };
 
@@ -182,6 +206,8 @@ const LessonAttachments: React.FC<{ attachments?: any[] }> = ({ attachments }) =
 };
 
 const CourseDetailsInner: React.FC<CourseDetailsProps> = ({ user, course, allCourses }) => {
+  const lastAutoAdvancedId = useRef<string | number | null>(null); 
+
   const {
     handleProjectSubmitWithFiles: onProjectSubmitWithFiles,
     handleToggleLessonComplete: onToggleLessonComplete,
@@ -212,51 +238,27 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({ user, course, allCou
   }, [course, activeLesson]);
 
  
-  useEffect(() => {
-    if (!activeLesson || activeLesson.isCompleted) return;
+useEffect(() => {
+  if (!activeLesson?.isCompleted) return;
+  if (String(activeLesson.id) === String(lastAutoAdvancedId.current)) return;
+  lastAutoAdvancedId.current = activeLesson.id;
 
-    const rawDuration = activeLesson.video_duration ?? activeLesson.duration;
+  checkCourseCompletion();
 
-    if (!rawDuration || isNaN(Number(rawDuration)) || Number(rawDuration) <= 0) {
-      console.log(`⚠️ No valid duration for lesson ${activeLesson.id}. Timer skipped.`);
-      return;
+  let nextLesson = null;
+  let foundCurrent = false;
+  for (const module of (course.content ?? [])) {
+    for (const lesson of (module.lessons ?? [])) {
+      if (foundCurrent) { nextLesson = lesson; break; }
+      if (String(lesson.id) === String(activeLesson.id)) foundCurrent = true;
     }
-
-    const durationMins = Number(rawDuration);
-    const triggerMs = Math.max(5000, durationMins * 60 * 1000);
-
-    console.log(`⏱️ Master Timer started for lesson ${activeLesson.id} (${durationMins} min). Firing in ${triggerMs / 1000}s`);
-
-    const timer = setTimeout(() => {
-      console.log(`🔥 Master Timer FIRED for lesson ${activeLesson.id}`);
-      
-      // 1. Mark current lesson complete
-      onLessonProgressToggle(activeLesson.id, true);
-      
-      // 2. Check if the whole course is done
-      checkCourseCompletion();
-
-      // 3. Find the next lesson
-      let nextLesson = null;
-      let foundCurrent = false;
-      for (const module of (course.content ?? [])) {
-        for (const lesson of (module.lessons ?? [])) {
-          if (foundCurrent) { nextLesson = lesson; break; }
-          if (String(lesson.id) === String(activeLesson.id)) foundCurrent = true;
-        }
-        if (nextLesson) break;
-      }
-
-      // 4. Auto-play next lesson
-      if (nextLesson) {
-        console.log(`⏭️ Auto-playing next lesson: ${nextLesson.title}`);
-        setActiveLesson(nextLesson);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    }, triggerMs);
-
-    return () => clearTimeout(timer);
-  }, [activeLesson?.id, activeLesson?.isCompleted, course.content]);
+    if (nextLesson) break;
+  }
+  if (nextLesson) {
+    setActiveLesson(nextLesson);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}, [activeLesson?.id, activeLesson?.isCompleted, course.content]);
   const [screenshotFiles, setScreenshotFiles] = useState<Record<string, File[]>>({});
   const [screenshotPreviews, setScreenshotPreviews] = useState<Record<string, string[]>>({});
   const [submissionDescriptions, setSubmissionDescriptions] = useState<Record<string, string>>({});
@@ -318,7 +320,7 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({ user, course, allCou
 
   const totalDurationMin = useMemo(() => {
     if (!Array.isArray(course.content)) return 0;
-    return course.content.reduce((acc: number, m: any) => {
+    const total = course.content.reduce((acc: number, m: any) => {
       const lessonMins = (m.lessons ?? []).reduce((sum: number, l: any) => {
         if (l.video_duration) return sum + Number(l.video_duration);
         if (typeof l.duration === 'string') {
@@ -329,10 +331,15 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({ user, course, allCou
       }, 0);
       return acc + lessonMins;
     }, 0);
+    return Math.round(total * 100) / 100;
   }, [course.content]);
 
   const lessonCountLabel = `${totalLessons} lesson${totalLessons === 1 ? '' : 's'}`;
-  const durationLabel = totalDurationMin > 0 ? (totalDurationMin >= 60 ? `${Math.floor(totalDurationMin / 60)}h ${totalDurationMin % 60}m` : `${totalDurationMin}m`) : course.duration || 'Self-paced';
+    const durationLabel = totalDurationMin > 0
+    ? (totalDurationMin >= 60
+        ? `${Math.floor(totalDurationMin / 60)}h ${(totalDurationMin % 60).toFixed(2).replace(/\.?0+$/, '')}m`
+        : `${totalDurationMin.toFixed(2).replace(/\.?0+$/, '')}m`)
+    : course.duration || 'Self-paced';
 
   const handleEnroll = async () => {
     try { await onEnrollmentSuccess(course.id); } catch (err) { alert('Payment succeeded but enrollment failed.'); }
@@ -425,12 +432,37 @@ const CourseDetailsInner: React.FC<CourseDetailsProps> = ({ user, course, allCou
         <div className="space-y-4">
           <div className="bg-black rounded-xl overflow-hidden shadow-xl">
             <div className="aspect-video">
-              {yt ? (
-                <YouTubePlayer key={lesson.id} videoId={yt.split("/embed/")[1].split("?")[0]} startAt={resumeAt} />
-              ) : vimeo ? (
-                <VimeoPlayer key={lesson.id} videoUrl={vimeo} lessonId={lesson.id} startAt={resumeAt} />
-              ) : (
-                <video key={lesson.id} src={videoUrl} controls autoPlay muted playsInline className="w-full h-full" onLoadedMetadata={(e) => { if (resumeAt > 0 && resumeAt < e.currentTarget.duration - 1) e.currentTarget.currentTime = resumeAt; }} />
+            {yt ? (
+  <YouTubePlayer
+    key={lesson.id}
+    videoId={yt.split("/embed/")[1].split("?")[0]}
+    startAt={resumeAt}
+    onEnded={() => handleToggleLesson(lesson.id)}
+  />
+) : vimeo ? (
+                  <VimeoPlayer
+                    key={lesson.id}
+                    videoUrl={vimeo}
+                    lessonId={lesson.id}
+                    startAt={resumeAt}
+                    onEnded={() => handleToggleLesson(lesson.id)}
+                  />
+                ) : (
+                <video
+  key={lesson.id}
+  src={videoUrl}
+  controls
+  autoPlay
+  muted
+  playsInline
+  className="w-full h-full"
+  onLoadedMetadata={(e) => {
+    if (resumeAt > 0 && resumeAt < e.currentTarget.duration - 1) {
+      e.currentTarget.currentTime = resumeAt;
+    }
+  }}
+  onEnded={() => handleToggleLesson(lesson.id)}
+/>
               )}
             </div>
             <div className="p-4 bg-white border-t border-gray-100 flex items-start justify-between gap-3">

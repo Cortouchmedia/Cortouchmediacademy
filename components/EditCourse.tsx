@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import type { Course, Lesson, Webinar, LessonAttachment } from '../types';
 import { Icon } from './Icon';
 import { useAppContext } from '../context/AppContext';
+import VideoUploadField from './VideoUploadField';
+import { authStorage } from '../lib/api';
 
 interface EditCourseProps {
   course: Course;
@@ -18,18 +20,31 @@ interface EditCourseProps {
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
     files?: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
-  ) => Promise<any>; // 👈 CHANGED to Promise<any> to get the response
+  ) => Promise<any>;
   onUpdateLesson: (
-    courseId: number | string,
     moduleId: number | string,
     lessonId: number | string,
     lessonData: Omit<Lesson, 'id' | 'isCompleted'> & {
       description?: string;
       durationMinutes?: number;
       isFree?: boolean;
+      video_url?: string;
+      video_public_id?: string;
+      video_bytes?: number;
+      video_duration?: number;
+      video_duration_seconds?: number;
+      text_content?: string;
+      is_free?: boolean;
     },
     files?: File[],
     linkAttachments?: Array<{ filename: string; url: string }>,
@@ -58,6 +73,9 @@ const initialLessonState = {
   duration: '',
   type: 'video' as 'video' | 'text',
   videoUrl: '',
+  video_public_id: '' as string | undefined,
+  video_bytes: undefined as number | undefined,
+  video_duration_seconds: undefined as number | undefined,
   content: '',
   description: '',
   isFree: false,
@@ -259,9 +277,12 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       duration: lesson.duration || '',
       type: lesson.type || 'video',
       videoUrl: lesson.videoUrl || lesson.video_url || '',
+      video_public_id: lesson.video_public_id ?? undefined,
+      video_bytes: lesson.video_bytes ?? undefined,
+      video_duration_seconds: lesson.video_duration_seconds ?? undefined,
       content: lesson.content || lesson.text_content || '',
       description: lesson.description || '',
-      isFree: lesson.isFree || false,
+      isFree: lesson.isFree || lesson.is_free || false,
     });
     setNewLessonFiles([]); 
     setNewLessonLinks([]); 
@@ -339,12 +360,14 @@ export const EditCourse: React.FC<EditCourseProps> = ({
       }),
     );
   
-    // ✅ FIX: backend-shaped payload — exactly the fields the service whitelist allows
     const backendPayload = {
       title: newLessonData.title,
-      video_duration: durationMinutes, // number (or undefined if blank)
+      video_duration: durationMinutes,
       description: newLessonData.description,
       video_url: newLessonData.videoUrl,
+      video_public_id: newLessonData.video_public_id,              
+      video_bytes: newLessonData.video_bytes,                       
+      video_duration_seconds: newLessonData.video_duration_seconds, 
       text_content: newLessonData.content,
       is_free: newLessonData.isFree,
     };
@@ -352,10 +375,9 @@ export const EditCourse: React.FC<EditCourseProps> = ({
     try {
       if (isEditing) {
         await onUpdateLesson(
-          course.id,
-          moduleId,
-          editingLessonId,
-          backendPayload as any,
+          moduleId as string,               
+          String(editingLessonId),        
+          backendPayload as any,          
           newLessonFiles.length > 0 ? newLessonFiles : undefined,
           newLessonLinks.length > 0 ? newLessonLinks : undefined,
         );
@@ -862,15 +884,40 @@ export const EditCourse: React.FC<EditCourseProps> = ({
                   </div>
 
                   {newLessonData.type === 'video' ? (
-                    <div className="space-y-2">
-                      <input type="text" name="videoUrl" value={newLessonData.videoUrl} onChange={handleNewLessonChange} placeholder="Video URL (YouTube embed, mp4, or Cloudinary)" className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm" />
-                      <p className="text-xs text-gray-500">
-                        For YouTube, use the embed URL format: https://www.youtube.com/embed/VIDEO_ID
-                      </p>
-                    </div>
-                  ) : (
-                    <textarea name="content" value={newLessonData.content} onChange={handleNewLessonChange} placeholder="Lesson text content..." rows={4} className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm" />
-                  )}
+  <VideoUploadField
+    value={newLessonData.videoUrl || null}
+    publicId={newLessonData.video_public_id || null}
+    onChange={(result) => {
+      if (!result) {
+        // user clicked "Replace" — clear the video metadata
+        setNewLessonData((prev) => ({
+          ...prev,
+          videoUrl: '',
+          video_public_id: undefined,
+          video_bytes: undefined,
+          video_duration_seconds: undefined,
+        }));
+        return;
+      }
+      setNewLessonData((prev) => ({
+        ...prev,
+        videoUrl: result.video_url,
+        video_public_id: result.video_public_id,
+        video_bytes: result.video_bytes,
+        video_duration_seconds: result.video_duration_seconds,
+      }));
+    }}
+  />
+) : (
+  <textarea
+    name="content"
+    value={newLessonData.content}
+    onChange={handleNewLessonChange}
+    placeholder="Lesson text content..."
+    rows={4}
+    className="w-full bg-white border border-gray-300 focus:border-brand-primary focus:ring-0 rounded-lg py-2 px-4 text-sm"
+  />
+)}
 
                   {!editingLessonId && (
                     <div className="border-t border-gray-200 pt-4 space-y-3">
