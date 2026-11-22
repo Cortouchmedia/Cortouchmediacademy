@@ -87,10 +87,11 @@ export class CoursesService {
           `video_duration_seconds must be a non-negative number`,
         );
       }
-      payload.video_duration = sec / 60;
+      // ✅ Round to 2 decimal places
+      payload.video_duration = Math.round((sec / 60) * 100) / 100;
       delete payload.video_duration_seconds;
     }
-
+  
     if (payload.video_duration !== undefined) {
       const parsed = Number(payload.video_duration);
       if (Number.isNaN(parsed) || parsed < 0 || parsed > 24 * 60) {
@@ -98,7 +99,8 @@ export class CoursesService {
           `video_duration must be a number between 0 and 1440 minutes (received "${payload.video_duration}")`,
         );
       }
-      payload.video_duration = parsed;
+      // ✅ Round to 2 decimal places
+      payload.video_duration = Math.round(parsed * 100) / 100;
     }
   }
 
