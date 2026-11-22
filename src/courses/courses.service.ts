@@ -951,14 +951,17 @@ export class CoursesService {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: lesson, error: lessonError } = await supabase
-  .from("course_lessons")
-  .select("module_id, video_public_id, attachments")
-  .eq("id", lessonId)
-  .single();
-
-if (lessonError || !lesson) {
-  throw new NotFoundException("Lesson not found");
-}
+    .from("course_lessons")
+    .select("module_id, video_public_id, attachments")
+    .eq("id", lessonId)
+    .single();
+  
+  if (lessonError || !lesson) {
+    this.logger.error(
+      `Supabase lesson lookup failed! ID: "${lessonId}", Error: ${lessonError?.message}, Code: ${lessonError?.code}`,
+    );
+    throw new NotFoundException("Lesson not found");
+  }
 
 const { data: module } = await supabase
   .from("course_modules")
